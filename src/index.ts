@@ -1,20 +1,26 @@
 import { Hono, type Context } from "hono";
-import { createAuth } from "./auth";
+import { createAuth, type Auth } from "./auth";
 import type { AppSession, Env } from "./types";
 import { accountPage, consentPage, signInPage } from "./views";
 
 type HonoEnv = {
   Bindings: Env;
+  Variables: { auth: Auth };
 };
 
 const app = new Hono<HonoEnv>({ strict: false });
 const authMethods = ["GET", "POST"];
 
 app.use("*", async (c, next) => {
+  c.set("auth", createAuth(c.env));
   await next();
   c.header("referrer-policy", "no-referrer");
   c.header("x-content-type-options", "nosniff");
   c.header("x-frame-options", "DENY");
+  c.header(
+    "content-security-policy",
+    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+  );
   c.header(
     "permissions-policy",
     "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()"
@@ -22,10 +28,9 @@ app.use("*", async (c, next) => {
 });
 
 async function getSession(
-  env: Env,
+  auth: Auth,
   request: Request
 ): Promise<AppSession | null> {
-  const auth = createAuth(env);
   const session = await auth.api.getSession({
     headers: request.headers
   });
@@ -34,17 +39,16 @@ async function getSession(
 }
 
 async function handleAuth(c: Context<HonoEnv>) {
-  const auth = createAuth(c.env);
-  return auth.handler(c.req.raw);
+  return c.get("auth").handler(c.req.raw);
 }
 
 app.get("/", async (c) => {
-  const session = await getSession(c.env, c.req.raw);
+  const session = await getSession(c.get("auth"), c.req.raw);
   return c.redirect(session ? "/account" : "/sign-in");
 });
 
 app.get("/sign-in", async (c) => {
-  const session = await getSession(c.env, c.req.raw);
+  const session = await getSession(c.get("auth"), c.req.raw);
   const query = new URL(c.req.url).searchParams;
   const isOAuthPrompt = query.has("client_id") || query.has("sig");
 
@@ -59,7 +63,7 @@ app.get("/sign-in", async (c) => {
 });
 
 app.get("/consent", async (c) => {
-  const session = await getSession(c.env, c.req.raw);
+  const session = await getSession(c.get("auth"), c.req.raw);
   if (!session) {
     const query = new URL(c.req.url).search;
     return c.redirect(`/sign-in${query}`);
@@ -74,7 +78,7 @@ app.get("/consent", async (c) => {
 });
 
 app.get("/account", async (c) => {
-  const session = await getSession(c.env, c.req.raw);
+  const session = await getSession(c.get("auth"), c.req.raw);
   if (!session) {
     return c.redirect("/sign-in");
   }

@@ -120,7 +120,7 @@ export const oauthRefreshToken = sqliteTable(
       .notNull()
       .references(() => oauthClient.clientId, { onDelete: "cascade" }),
     sessionId: text("sessionId").references(() => session.id, {
-      onDelete: "set null"
+      onDelete: "cascade"
     }),
     userId: text("userId")
       .notNull()
@@ -143,12 +143,12 @@ export const oauthAccessToken = sqliteTable(
   "oauthAccessToken",
   {
     id: id(),
-    token: text("token").unique(),
+    token: text("token").notNull().unique(),
     clientId: text("clientId")
       .notNull()
       .references(() => oauthClient.clientId, { onDelete: "cascade" }),
     sessionId: text("sessionId").references(() => session.id, {
-      onDelete: "set null"
+      onDelete: "cascade"
     }),
     userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
     referenceId: text("referenceId"),

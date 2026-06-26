@@ -81,7 +81,7 @@ export function page({ title, body, script }: PageOptions): string {
         color: var(--accent-text);
         cursor: pointer;
         font: inherit;
-        font-weight: 650;
+        font-weight: 600;
         text-decoration: none;
       }
       button.secondary {
@@ -149,7 +149,7 @@ export function consentPage(clientId: string, scope: string): string {
     title: "Authorize application",
     body: `
       <h1>Authorize application</h1>
-      <p>${escapeHtml(clientId)} is requesting access to your FOSSBilling account.</p>
+      <p>An application (<code>${escapeHtml(clientId)}</code>) is requesting access to your FOSSBilling account.</p>
       <dl>
         <dt>Requested scopes</dt>
         <dd>${escapeHtml(scope || "openid profile email")}</dd>
@@ -169,7 +169,7 @@ export function consentPage(clientId: string, scope: string): string {
           window.location.href = data.url;
           return;
         }
-        window.location.href = '/account';
+        window.location.href = accept ? '/account' : '/sign-in';
       }
       document.getElementById('accept-consent')?.addEventListener('click', () => submitConsent(true));
       document.getElementById('deny-consent')?.addEventListener('click', () => submitConsent(false));

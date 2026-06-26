@@ -30,8 +30,9 @@ export function createAuth(env: Env) {
     trustedOrigins: [
       baseURL,
       "https://extensions.fossbilling.org",
-      "http://localhost:4321",
-      "http://localhost:8787"
+      ...(baseURL !== PRODUCTION_URL
+        ? ["http://localhost:4321", "http://localhost:8787"]
+        : [])
     ],
     socialProviders: {
       github: {
