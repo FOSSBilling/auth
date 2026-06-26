@@ -1,0 +1,27 @@
+{
+  "name": "auth",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types",
+    "db:migrate:local": "wrangler d1 migrations apply AUTH_DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply AUTH_DB --remote",
+    "format": "prettier --write \"src/**/*.ts\" \"*.{json,jsonc,md,ts}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.{json,jsonc,md,ts}\""
+  },
+  "dependencies": {
+    "@better-auth/oauth-provider": "^1.6.22",
+    "better-auth": "^1.6.22",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.27"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "prettier": "^3.8.5",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.105.0"
+  }
+}
