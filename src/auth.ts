@@ -3,6 +3,7 @@ import { jwt } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { drizzle } from "drizzle-orm/d1";
+import * as schema from "./db/schema";
 import type { Env } from "./types";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
@@ -13,7 +14,7 @@ export function getBaseUrl(env: Env): string {
 
 export function createAuth(env: Env) {
   const baseURL = getBaseUrl(env);
-  const db = drizzle(env.AUTH_DB);
+  const db = drizzle(env.AUTH_DB, { schema });
 
   return betterAuth({
     appName: "FOSSBilling",
@@ -23,6 +24,7 @@ export function createAuth(env: Env) {
     disabledPaths: ["/token"],
     database: drizzleAdapter(db, {
       provider: "sqlite",
+      schema,
       camelCase: true
     }),
     trustedOrigins: [
