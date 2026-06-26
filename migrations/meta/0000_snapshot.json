@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "83a2d651-a784-42a9-bff2-5c6249db4ccf",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "6341f2d5-324e-43f4-9302-b023fa952a74",
+  "prevId": "83a2d651-a784-42a9-bff2-5c6249db4ccf",
   "tables": {
     "account": {
       "name": "account",
@@ -186,7 +186,7 @@
           "name": "token",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "clientId": {
@@ -307,7 +307,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
         "oauthAccessToken_userId_user_id_fk": {
@@ -826,7 +826,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
         "oauthRefreshToken_userId_user_id_fk": {
