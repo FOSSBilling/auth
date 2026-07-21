@@ -44,7 +44,7 @@ async function handleAuth(c: Context<HonoEnv>) {
 
 app.get("/", async (c) => {
   const session = await getSession(c.get("auth"), c.req.raw);
-  return c.redirect(session ? "/account" : "/sign-in");
+  return c.redirect(session ? "/account" : "https://fossbilling.org");
 });
 
 app.get("/sign-in", async (c) => {
