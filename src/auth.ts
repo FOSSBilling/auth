@@ -12,6 +12,15 @@ export function getBaseUrl(env: Env): string {
   return env.BETTER_AUTH_URL ?? PRODUCTION_URL;
 }
 
+function isAdminEmail(env: Env, email?: string | null): boolean {
+  if (!email) return false;
+  const admins = (env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  return admins.includes(email.toLowerCase());
+}
+
 export function createAuth(env: Env) {
   const baseURL = getBaseUrl(env);
   const db = drizzle(env.AUTH_DB, { schema });
@@ -78,6 +87,8 @@ export function createAuth(env: Env) {
         ],
         allowDynamicClientRegistration: false,
         allowUnauthenticatedClientRegistration: false,
+        clientPrivileges: ({ user }) =>
+          Boolean(user?.emailVerified) && isAdminEmail(env, user?.email),
         accessTokenExpiresIn: 60 * 60,
         idTokenExpiresIn: 60 * 60,
         refreshTokenExpiresIn: 60 * 60 * 24 * 30,

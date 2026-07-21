@@ -63,7 +63,13 @@ npm run dev
 npx wrangler secret put BETTER_AUTH_SECRET
 npx wrangler secret put GITHUB_CLIENT_ID
 npx wrangler secret put GITHUB_CLIENT_SECRET
+npx wrangler secret put ADMIN_EMAILS
 ```
+
+`ADMIN_EMAILS` is a comma-separated list of verified email addresses allowed to manage
+OAuth clients (create/read/update/delete/list/rotate via `/oauth2/*-client` endpoints).
+Anyone who signs in with GitHub gets an identity, but only these addresses can register
+or modify OAuth clients — see [`clientPrivileges`](./src/auth.ts).
 
 4. Apply remote migrations:
 
@@ -104,7 +110,7 @@ POST /oauth2/introspect
 POST /oauth2/revoke
 ```
 
-Dynamic client registration is intentionally disabled. First-party OAuth clients should be created deliberately through an internal/admin process rather than self-service public registration.
+Dynamic client registration is intentionally disabled. First-party OAuth clients should be created deliberately through an internal/admin process rather than self-service public registration — enforced by `ADMIN_EMAILS` (see [Production Setup](#production-setup)), since otherwise any GitHub-authenticated user could call the authenticated client-management endpoints.
 
 ## Boundary
 
