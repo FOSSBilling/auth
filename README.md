@@ -47,6 +47,14 @@ npm run dev
 
 ## Production Setup
 
+> **Note:** `wrangler.jsonc` intentionally has no `routes` entry. A `routes` block with
+> `custom_domain: true` breaks `wrangler dev` locally (Origin/Host resolution gets
+> corrupted, causing spurious `Invalid origin` errors — see
+> [workers-sdk#14683](https://github.com/cloudflare/workers-sdk/issues/14683)). The
+> `auth.fossbilling.net` custom domain is instead attached to this Worker directly in
+> the Cloudflare dashboard, so `wrangler deploy` (which has no `routes` to sync) won't
+> touch or remove it.
+
 1. Create a Cloudflare D1 database.
 2. Replace `database_id` in `wrangler.jsonc`.
 3. Set Worker secrets:

@@ -15,13 +15,6 @@
   "workers_dev": false,
   "preview_urls": true,
   "keep_vars": true,
-  "routes": [
-    {
-      "pattern": "auth.fossbilling.net",
-      "zone_name": "fossbilling.net",
-      "custom_domain": true
-    }
-  ],
   "vars": {
     "BETTER_AUTH_URL": "https://auth.fossbilling.net"
   },
