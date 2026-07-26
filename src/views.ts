@@ -119,7 +119,8 @@ export function signInPage(error?: string | null): string {
     `,
     script: `
       const button = document.getElementById('github-sign-in');
-      button?.addEventListener('click', async () => {
+      if (!button) return;
+      button.addEventListener('click', async () => {
         button.disabled = true;
         const oauthQuery = window.location.search.slice(1);
         const response = await fetch('/sign-in/social', {
