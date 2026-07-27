@@ -103,7 +103,7 @@ export function page({ title, body, script }: PageOptions): string {
   </head>
   <body>
     <main>${body}</main>
-    ${script ? `<script>${script}</script>` : ""}
+    ${script ? `<script>(function () {${script}})();</script>` : ""}
   </body>
 </html>`;
 }
