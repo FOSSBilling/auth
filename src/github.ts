@@ -4,6 +4,27 @@ import { logger } from "@better-auth/core/env";
 // read the user's own org memberships (requires the read:org scope granted
 // in auth.ts) and persist both onto the user row as githubLogin/githubOrgs —
 // see the comment on those columns in db/schema.ts for why.
+//
+// Returning githubLogin/githubOrgs directly on getUserInfo's `user` object
+// would NOT persist them: Better Auth's additionalFields `input: false`
+// (required so a signed-in user can't forge these via POST /update-user)
+// makes it strip any field with that flag out of the OAuth profile too,
+// via the same schema used for client input. So this instead stashes the
+// fetched values keyed by GitHub's numeric id (== the account row's
+// accountId in every sign-in/link path) and auth.ts's databaseHooks reads
+// them back once the account row lands, bypassing that filter entirely.
+const pendingGithubProfiles = new Map<
+  string,
+  { login: string; orgs: string[] }
+>();
+
+export function consumeGithubProfile(
+  accountId: string
+): { login: string; orgs: string[] } | undefined {
+  const profile = pendingGithubProfiles.get(accountId);
+  pendingGithubProfiles.delete(accountId);
+  return profile;
+}
 
 interface GithubProfile {
   id: number;
@@ -92,6 +113,10 @@ export async function getGithubUserInfo(token: { accessToken?: string }) {
     }
 
     const githubOrgs = await fetchActiveOrgLogins(token.accessToken);
+    pendingGithubProfiles.set(String(profile.id), {
+      login: profile.login,
+      orgs: githubOrgs
+    });
 
     return {
       user: {
@@ -99,9 +124,7 @@ export async function getGithubUserInfo(token: { accessToken?: string }) {
         name: profile.name || profile.login,
         email,
         image: profile.avatar_url,
-        emailVerified,
-        githubLogin: profile.login,
-        githubOrgs: JSON.stringify(githubOrgs)
+        emailVerified
       },
       data: profile
     };
