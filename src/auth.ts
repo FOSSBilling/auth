@@ -4,6 +4,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
+import { getGithubUserInfo } from "./github";
 import type { Env } from "./types";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
@@ -19,6 +20,30 @@ function isAdminEmail(env: Env, email?: string | null): boolean {
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
   return admins.includes(email.toLowerCase());
+}
+
+// Omitted entirely (rather than emitted as null/[]) when a user has never
+// completed a GitHub sign-in since the githubLogin/githubOrgs columns were
+// added — downstream consumers treat a missing claim the same as "unknown",
+// never as "confirmed not a member of anything".
+function githubClaims(user: Record<string, unknown>) {
+  const githubLogin = user.githubLogin as string | null | undefined;
+  const githubOrgsRaw = user.githubOrgs as string | null | undefined;
+  if (!githubLogin) return {};
+  let githubOrgs: string[] = [];
+  if (githubOrgsRaw) {
+    try {
+      githubOrgs = JSON.parse(githubOrgsRaw) as string[];
+    } catch {
+      // Malformed stored value shouldn't break token/userinfo issuance —
+      // treat it the same as "no orgs" rather than throwing.
+      githubOrgs = [];
+    }
+  }
+  return {
+    "https://fossbilling.org/claims/github_login": githubLogin,
+    "https://fossbilling.org/claims/github_orgs": githubOrgs
+  };
 }
 
 export function createAuth(env: Env) {
@@ -43,10 +68,37 @@ export function createAuth(env: Env) {
         ? ["http://localhost:4321", "http://localhost:8787"]
         : [])
     ],
+    user: {
+      additionalFields: {
+        // Populated from getGithubUserInfo's return value — see the column
+        // comment in db/schema.ts.
+        githubLogin: { type: "string", required: false, input: false },
+        githubOrgs: { type: "string", required: false, input: false }
+      }
+    },
+    // Without these, re-running getGithubUserInfo on an already-linked
+    // account (a regular repeat sign-in, or the explicit re-link flow in
+    // views.ts) refreshes the account's tokens/scope but not
+    // githubLogin/githubOrgs on the user row — org membership can change
+    // over time, so both paths need to actually pick that up.
+    account: {
+      accountLinking: {
+        updateUserInfoOnLink: true
+      }
+    },
     socialProviders: {
       github: {
         clientId: env.GITHUB_CLIENT_ID,
-        clientSecret: env.GITHUB_CLIENT_SECRET
+        clientSecret: env.GITHUB_CLIENT_SECRET,
+        // Additive, not a replacement: better-auth's github provider always
+        // requests its default read:user/user:email scopes regardless of
+        // this list (see createAuthorizationURL in
+        // @better-auth/core/social-providers/github.ts). This only adds
+        // read:org on top, so getGithubUserInfo can see the user's own org
+        // memberships (including private ones) to persist githubOrgs below.
+        scope: ["read:org"],
+        getUserInfo: getGithubUserInfo,
+        overrideUserInfoOnSignIn: true
       }
     },
     plugins: [
@@ -98,10 +150,20 @@ export function createAuth(env: Env) {
           refreshToken: "fba_rt_"
         },
         customIdTokenClaims: ({ user }) => ({
-          "https://fossbilling.org/claims/user_id": user.id
+          "https://fossbilling.org/claims/user_id": user.id,
+          ...githubClaims(user)
         }),
         customAccessTokenClaims: ({ user }) => ({
-          ...(user ? { "https://fossbilling.org/claims/user_id": user.id } : {})
+          ...(user
+            ? {
+                "https://fossbilling.org/claims/user_id": user.id,
+                ...githubClaims(user)
+              }
+            : {})
+        }),
+        customUserInfoClaims: ({ user }) => ({
+          "https://fossbilling.org/claims/user_id": user.id,
+          ...githubClaims(user)
         })
       })
     ]

@@ -8,6 +8,13 @@
       "when": 1782507757206,
       "tag": "0000_better_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785228118125,
+      "tag": "0001_add_user_github_fields",
+      "breakpoints": true
     }
   ]
 }
