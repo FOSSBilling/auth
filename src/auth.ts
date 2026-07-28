@@ -2,9 +2,10 @@ import { betterAuth } from "better-auth/minimal";
 import { jwt } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
-import { getGithubUserInfo } from "./github";
+import { getGithubUserInfo, consumeGithubProfile } from "./github";
 import type { Env } from "./types";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
@@ -50,6 +51,26 @@ export function createAuth(env: Env) {
   const baseURL = getBaseUrl(env);
   const db = drizzle(env.AUTH_DB, { schema });
 
+  async function persistGithubProfile(account: {
+    accountId: string;
+    userId: string;
+  }) {
+    const profile = consumeGithubProfile(account.accountId);
+    if (!profile) return;
+    // orgs is null when fetchActiveOrgLogins couldn't complete (rate limit,
+    // transient GitHub error) — leave the existing githubOrgs value alone
+    // rather than overwriting confirmed data with "couldn't tell".
+    await db
+      .update(schema.user)
+      .set({
+        githubLogin: profile.login,
+        ...(profile.orgs !== null
+          ? { githubOrgs: JSON.stringify(profile.orgs) }
+          : {})
+      })
+      .where(eq(schema.user.id, account.userId));
+  }
+
   return betterAuth({
     appName: "FOSSBilling",
     baseURL,
@@ -70,20 +91,33 @@ export function createAuth(env: Env) {
     ],
     user: {
       additionalFields: {
-        // Populated from getGithubUserInfo's return value — see the column
-        // comment in db/schema.ts.
+        // input: false only blocks these from POST /update-user (so a user
+        // can't forge their own verified org membership) — it does NOT get
+        // them populated from getUserInfo/OAuth profile data, since Better
+        // Auth runs both through the same input-filtered parser. They're
+        // actually written by the databaseHooks below instead.
         githubLogin: { type: "string", required: false, input: false },
         githubOrgs: { type: "string", required: false, input: false }
       }
     },
-    // Without these, re-running getGithubUserInfo on an already-linked
-    // account (a regular repeat sign-in, or the explicit re-link flow in
-    // views.ts) refreshes the account's tokens/scope but not
-    // githubLogin/githubOrgs on the user row — org membership can change
-    // over time, so both paths need to actually pick that up.
+    // Keeps name/image in sync on a repeat sign-in or the explicit re-link
+    // flow in views.ts. githubLogin/githubOrgs are handled separately by the
+    // databaseHooks below — see the additionalFields comment above for why.
     account: {
       accountLinking: {
         updateUserInfoOnLink: true
+      }
+    },
+    // getGithubUserInfo (github.ts) stashes the freshly-fetched
+    // githubLogin/githubOrgs keyed by the GitHub account's numeric id, which
+    // is always the account row's accountId — in every sign-in/link path,
+    // creating or updating that account row is the one step common to all of
+    // them. Picking the values back up here, and writing them with a direct
+    // query, sidesteps the additionalFields input-filter issue noted above.
+    databaseHooks: {
+      account: {
+        create: { after: persistGithubProfile },
+        update: { after: persistGithubProfile }
       }
     },
     socialProviders: {

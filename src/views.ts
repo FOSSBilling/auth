@@ -84,8 +84,10 @@ export function page({ title, body, script }: PageOptions): string {
         font-weight: 600;
         text-decoration: none;
       }
-      button.secondary {
+      button + button, button + .button, .button + button, .button + .button {
         margin-top: 10px;
+      }
+      button.secondary {
         background: transparent;
         color: var(--text);
         border-color: var(--border);
@@ -200,23 +202,37 @@ export function accountPage(session: AppSession): string {
           ? ""
           : `<p>Grant access to your GitHub organizations so extension developer
              profile claims can be verified automatically.</p>
-             <button id="link-github-orgs" type="button">Grant GitHub org access</button>`
+             <button id="link-github-orgs" type="button">Grant GitHub org access</button>
+             <p class="error" id="link-github-orgs-error" hidden></p>`
       }
       <button id="sign-out" type="button">Sign out</button>
     `,
     script: `
       document.getElementById('link-github-orgs')?.addEventListener('click', async (e) => {
         const button = e.currentTarget;
+        const errorEl = document.getElementById('link-github-orgs-error');
         button.disabled = true;
-        const response = await fetch('/link-social', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ provider: 'github', callbackURL: '/account' })
-        });
-        const data = await response.json().catch(() => null);
-        if (data?.url) {
-          window.location.href = data.url;
-          return;
+        if (errorEl) errorEl.hidden = true;
+        try {
+          const response = await fetch('/link-social', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ provider: 'github', callbackURL: '/account' })
+          });
+          const data = await response.json().catch(() => null);
+          if (data?.url) {
+            window.location.href = data.url;
+            return;
+          }
+          if (errorEl) {
+            errorEl.textContent = data?.message || 'Unable to start GitHub linking. Try again.';
+            errorEl.hidden = false;
+          }
+        } catch {
+          if (errorEl) {
+            errorEl.textContent = 'Unable to start GitHub linking. Try again.';
+            errorEl.hidden = false;
+          }
         }
         button.disabled = false;
       });
