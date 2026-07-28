@@ -15,12 +15,12 @@ import { logger } from "@better-auth/core/env";
 // them back once the account row lands, bypassing that filter entirely.
 const pendingGithubProfiles = new Map<
   string,
-  { login: string; orgs: string[] }
+  { login: string; orgs: string[] | null }
 >();
 
 export function consumeGithubProfile(
   accountId: string
-): { login: string; orgs: string[] } | undefined {
+): { login: string; orgs: string[] | null } | undefined {
   const profile = pendingGithubProfiles.get(accountId);
   pendingGithubProfiles.delete(accountId);
   return profile;
@@ -49,7 +49,14 @@ const GITHUB_API_HEADERS = (accessToken: string) => ({
   Authorization: `Bearer ${accessToken}`
 });
 
-async function fetchActiveOrgLogins(accessToken: string): Promise<string[]> {
+// Returns null on any failure (rather than a possibly-partial array) so
+// callers can tell "confirmed zero active memberships" apart from "couldn't
+// tell" — persisting the latter as the former would overwrite a
+// previously-verified githubOrgs with an empty one on a transient GitHub
+// API hiccup, silently un-verifying every claim that depended on it.
+async function fetchActiveOrgLogins(
+  accessToken: string
+): Promise<string[] | null> {
   try {
     const logins: string[] = [];
     const perPage = 100;
@@ -61,7 +68,12 @@ async function fetchActiveOrgLogins(accessToken: string): Promise<string[]> {
         `https://api.github.com/user/memberships/orgs?state=active&per_page=${perPage}&page=${page}`,
         { headers: GITHUB_API_HEADERS(accessToken) }
       );
-      if (!response.ok) break;
+      if (!response.ok) {
+        logger.error(
+          `Failed to fetch GitHub org memberships: status ${response.status}`
+        );
+        return null;
+      }
       const memberships = (await response.json()) as GithubOrgMembership[];
       logins.push(
         ...memberships.map((m) => m.organization.login.toLowerCase())
@@ -73,7 +85,7 @@ async function fetchActiveOrgLogins(accessToken: string): Promise<string[]> {
     // Best-effort — org membership is only ever an additive verification
     // signal downstream, never something sign-in itself should fail on.
     logger.error("Failed to fetch GitHub org memberships:", error);
-    return [];
+    return null;
   }
 }
 

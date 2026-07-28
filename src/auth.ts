@@ -57,11 +57,16 @@ export function createAuth(env: Env) {
   }) {
     const profile = consumeGithubProfile(account.accountId);
     if (!profile) return;
+    // orgs is null when fetchActiveOrgLogins couldn't complete (rate limit,
+    // transient GitHub error) — leave the existing githubOrgs value alone
+    // rather than overwriting confirmed data with "couldn't tell".
     await db
       .update(schema.user)
       .set({
         githubLogin: profile.login,
-        githubOrgs: JSON.stringify(profile.orgs)
+        ...(profile.orgs !== null
+          ? { githubOrgs: JSON.stringify(profile.orgs) }
+          : {})
       })
       .where(eq(schema.user.id, account.userId));
   }
