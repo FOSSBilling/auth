@@ -28,13 +28,21 @@ function isAdminEmail(env: Env, email?: string | null): boolean {
 // never as "confirmed not a member of anything".
 function githubClaims(user: Record<string, unknown>) {
   const githubLogin = user.githubLogin as string | null | undefined;
-  const githubOrgs = user.githubOrgs as string | null | undefined;
+  const githubOrgsRaw = user.githubOrgs as string | null | undefined;
   if (!githubLogin) return {};
+  let githubOrgs: string[] = [];
+  if (githubOrgsRaw) {
+    try {
+      githubOrgs = JSON.parse(githubOrgsRaw) as string[];
+    } catch {
+      // Malformed stored value shouldn't break token/userinfo issuance —
+      // treat it the same as "no orgs" rather than throwing.
+      githubOrgs = [];
+    }
+  }
   return {
     "https://fossbilling.org/claims/github_login": githubLogin,
     "https://fossbilling.org/claims/github_orgs": githubOrgs
-      ? (JSON.parse(githubOrgs) as string[])
-      : []
   };
 }
 
@@ -82,7 +90,11 @@ export function createAuth(env: Env) {
       github: {
         clientId: env.GITHUB_CLIENT_ID,
         clientSecret: env.GITHUB_CLIENT_SECRET,
-        // read:org lets getGithubUserInfo see the user's own org
+        // Additive, not a replacement: better-auth's github provider always
+        // requests its default read:user/user:email scopes regardless of
+        // this list (see createAuthorizationURL in
+        // @better-auth/core/social-providers/github.ts). This only adds
+        // read:org on top, so getGithubUserInfo can see the user's own org
         // memberships (including private ones) to persist githubOrgs below.
         scope: ["read:org"],
         getUserInfo: getGithubUserInfo,
