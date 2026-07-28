@@ -11,7 +11,15 @@ export const user = sqliteTable("user", {
   emailVerified: boolean("emailVerified").notNull(),
   image: text("image"),
   createdAt: timestamp("createdAt").notNull(),
-  updatedAt: timestamp("updatedAt").notNull()
+  updatedAt: timestamp("updatedAt").notNull(),
+  // Linked GitHub identity, refreshed on every GitHub sign-in. githubOrgs is
+  // a JSON-encoded array of lowercase org logins where membership state is
+  // "active", fetched with the read:org scope so private memberships are
+  // included — used downstream (extensions/api repos) to verify developer
+  // profile claims. Null until the user completes a GitHub login after this
+  // scope was added.
+  githubLogin: text("githubLogin"),
+  githubOrgs: text("githubOrgs")
 });
 
 export const session = sqliteTable(

@@ -4,6 +4,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
+import { getGithubUserInfo } from "./github";
 import type { Env } from "./types";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
@@ -19,6 +20,22 @@ function isAdminEmail(env: Env, email?: string | null): boolean {
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
   return admins.includes(email.toLowerCase());
+}
+
+// Omitted entirely (rather than emitted as null/[]) when a user has never
+// completed a GitHub sign-in since the githubLogin/githubOrgs columns were
+// added — downstream consumers treat a missing claim the same as "unknown",
+// never as "confirmed not a member of anything".
+function githubClaims(user: Record<string, unknown>) {
+  const githubLogin = user.githubLogin as string | null | undefined;
+  const githubOrgs = user.githubOrgs as string | null | undefined;
+  if (!githubLogin) return {};
+  return {
+    "https://fossbilling.org/claims/github_login": githubLogin,
+    "https://fossbilling.org/claims/github_orgs": githubOrgs
+      ? (JSON.parse(githubOrgs) as string[])
+      : []
+  };
 }
 
 export function createAuth(env: Env) {
@@ -43,10 +60,22 @@ export function createAuth(env: Env) {
         ? ["http://localhost:4321", "http://localhost:8787"]
         : [])
     ],
+    user: {
+      additionalFields: {
+        // Populated from getGithubUserInfo's return value on every GitHub
+        // sign-in — see the column comment in db/schema.ts.
+        githubLogin: { type: "string", required: false, input: false },
+        githubOrgs: { type: "string", required: false, input: false }
+      }
+    },
     socialProviders: {
       github: {
         clientId: env.GITHUB_CLIENT_ID,
-        clientSecret: env.GITHUB_CLIENT_SECRET
+        clientSecret: env.GITHUB_CLIENT_SECRET,
+        // read:org lets getGithubUserInfo see the user's own org
+        // memberships (including private ones) to persist githubOrgs below.
+        scope: ["read:org"],
+        getUserInfo: getGithubUserInfo
       }
     },
     plugins: [
@@ -98,10 +127,20 @@ export function createAuth(env: Env) {
           refreshToken: "fba_rt_"
         },
         customIdTokenClaims: ({ user }) => ({
-          "https://fossbilling.org/claims/user_id": user.id
+          "https://fossbilling.org/claims/user_id": user.id,
+          ...githubClaims(user)
         }),
         customAccessTokenClaims: ({ user }) => ({
-          ...(user ? { "https://fossbilling.org/claims/user_id": user.id } : {})
+          ...(user
+            ? {
+                "https://fossbilling.org/claims/user_id": user.id,
+                ...githubClaims(user)
+              }
+            : {})
+        }),
+        customUserInfoClaims: ({ user }) => ({
+          "https://fossbilling.org/claims/user_id": user.id,
+          ...githubClaims(user)
         })
       })
     ]
