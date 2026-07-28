@@ -195,9 +195,31 @@ export function accountPage(session: AppSession): string {
         <dt>Email</dt>
         <dd>${escapeHtml(session.user.email)}</dd>
       </dl>
+      ${
+        session.user.githubLogin
+          ? ""
+          : `<p>Grant access to your GitHub organizations so extension developer
+             profile claims can be verified automatically.</p>
+             <button id="link-github-orgs" type="button">Grant GitHub org access</button>`
+      }
       <button id="sign-out" type="button">Sign out</button>
     `,
     script: `
+      document.getElementById('link-github-orgs')?.addEventListener('click', async (e) => {
+        const button = e.currentTarget;
+        button.disabled = true;
+        const response = await fetch('/link-social', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ provider: 'github', callbackURL: '/account' })
+        });
+        const data = await response.json().catch(() => null);
+        if (data?.url) {
+          window.location.href = data.url;
+          return;
+        }
+        button.disabled = false;
+      });
       document.getElementById('sign-out')?.addEventListener('click', async () => {
         await fetch('/sign-out', { method: 'POST' });
         window.location.href = '/sign-in';

@@ -62,10 +62,20 @@ export function createAuth(env: Env) {
     ],
     user: {
       additionalFields: {
-        // Populated from getGithubUserInfo's return value on every GitHub
-        // sign-in — see the column comment in db/schema.ts.
+        // Populated from getGithubUserInfo's return value — see the column
+        // comment in db/schema.ts.
         githubLogin: { type: "string", required: false, input: false },
         githubOrgs: { type: "string", required: false, input: false }
+      }
+    },
+    // Without these, re-running getGithubUserInfo on an already-linked
+    // account (a regular repeat sign-in, or the explicit re-link flow in
+    // views.ts) refreshes the account's tokens/scope but not
+    // githubLogin/githubOrgs on the user row — org membership can change
+    // over time, so both paths need to actually pick that up.
+    account: {
+      accountLinking: {
+        updateUserInfoOnLink: true
       }
     },
     socialProviders: {
@@ -75,7 +85,8 @@ export function createAuth(env: Env) {
         // read:org lets getGithubUserInfo see the user's own org
         // memberships (including private ones) to persist githubOrgs below.
         scope: ["read:org"],
-        getUserInfo: getGithubUserInfo
+        getUserInfo: getGithubUserInfo,
+        overrideUserInfoOnSignIn: true
       }
     },
     plugins: [

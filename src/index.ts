@@ -87,6 +87,7 @@ app.get("/account", async (c) => {
 });
 
 app.on(authMethods, "/sign-in/social", handleAuth);
+app.on(authMethods, "/link-social", handleAuth);
 app.on(authMethods, "/callback/:provider", handleAuth);
 app.on(authMethods, "/sign-out", handleAuth);
 app.on(authMethods, "/get-session", handleAuth);
