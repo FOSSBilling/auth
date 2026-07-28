@@ -6,6 +6,14 @@ type PageOptions = {
   script?: string;
 };
 
+// Server-controlled values (client ids, callback URLs) get embedded directly
+// into inline <script> blocks below. JSON.stringify alone doesn't escape
+// "<", so a value containing "</script>" could break out of the tag —
+// escape it to a JS string literal that's also safe as script content.
+function jsString(value: string): string {
+  return JSON.stringify(value).replaceAll("<", "\\u003c");
+}
+
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -180,7 +188,10 @@ export function consentPage(clientId: string, scope: string): string {
   });
 }
 
-export function accountPage(session: AppSession): string {
+export function accountPage(
+  session: AppSession,
+  callbackURL = "/account"
+): string {
   const image = session.user.image
     ? `<img class="avatar" src="${escapeHtml(session.user.image)}" alt="" />`
     : "";
@@ -217,7 +228,7 @@ export function accountPage(session: AppSession): string {
           const response = await fetch('/link-social', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ provider: 'github', callbackURL: '/account' })
+            body: JSON.stringify({ provider: 'github', callbackURL: ${jsString(callbackURL)} })
           });
           const data = await response.json().catch(() => null);
           if (data?.url) {

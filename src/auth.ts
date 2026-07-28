@@ -14,6 +14,29 @@ export function getBaseUrl(env: Env): string {
   return env.BETTER_AUTH_URL ?? PRODUCTION_URL;
 }
 
+export function getTrustedOrigins(env: Env): string[] {
+  const baseURL = getBaseUrl(env);
+  return [
+    baseURL,
+    "https://extensions.fossbilling.org",
+    ...(baseURL !== PRODUCTION_URL
+      ? ["http://localhost:4321", "http://localhost:8787"]
+      : [])
+  ];
+}
+
+// Used to gate the /account page's callbackURL query param — better-auth's
+// own /link-social endpoint doesn't validate callbackURL against
+// trustedOrigins itself (unlike sign-in/reset-password routes), so we do it
+// here before ever handing that URL back to the client.
+export function isTrustedCallbackUrl(env: Env, url: string): boolean {
+  try {
+    return getTrustedOrigins(env).includes(new URL(url).origin);
+  } catch {
+    return false;
+  }
+}
+
 function isAdminEmail(env: Env, email?: string | null): boolean {
   if (!email) return false;
   const admins = (env.ADMIN_EMAILS ?? "")
@@ -82,13 +105,7 @@ export function createAuth(env: Env) {
       schema,
       camelCase: true
     }),
-    trustedOrigins: [
-      baseURL,
-      "https://extensions.fossbilling.org",
-      ...(baseURL !== PRODUCTION_URL
-        ? ["http://localhost:4321", "http://localhost:8787"]
-        : [])
-    ],
+    trustedOrigins: getTrustedOrigins(env),
     user: {
       additionalFields: {
         // input: false only blocks these from POST /update-user (so a user

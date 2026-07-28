@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import { createAuth, type Auth } from "./auth";
+import { createAuth, isTrustedCallbackUrl, type Auth } from "./auth";
 import type { AppSession, Env } from "./types";
 import { accountPage, consentPage, signInPage } from "./views";
 
@@ -83,7 +83,16 @@ app.get("/account", async (c) => {
     return c.redirect("/sign-in");
   }
 
-  return c.html(accountPage(session));
+  // Lets a linking caller (e.g. extensions' "Reconnect GitHub") send the
+  // user back through its own OIDC flow after linking completes, instead of
+  // stranding them on this page — see accountPage's script for how it's used.
+  const requestedCallback = c.req.query("callbackURL");
+  const callbackURL =
+    requestedCallback && isTrustedCallbackUrl(c.env, requestedCallback)
+      ? requestedCallback
+      : "/account";
+
+  return c.html(accountPage(session, callbackURL));
 });
 
 app.on(authMethods, "/sign-in/social", handleAuth);
