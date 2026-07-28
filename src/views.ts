@@ -6,6 +6,14 @@ type PageOptions = {
   script?: string;
 };
 
+// Server-controlled values (client ids, callback URLs) get embedded directly
+// into inline <script> blocks below. JSON.stringify alone doesn't escape
+// "<", so a value containing "</script>" could break out of the tag —
+// escape it to a JS string literal that's also safe as script content.
+function jsString(value: string): string {
+  return JSON.stringify(value).replaceAll("<", "\\u003c");
+}
+
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -110,7 +118,19 @@ export function page({ title, body, script }: PageOptions): string {
 </html>`;
 }
 
-export function signInPage(error?: string | null): string {
+export function signInPage(
+  error?: string | null,
+  callbackURL = "/account"
+): string {
+  // Preserved across the error-retry and no-op fallback redirects below too,
+  // so a caller's callbackURL (e.g. extensions' reconnect flow, threaded
+  // through here when /account bounces an expired session to /sign-in)
+  // survives a failed or retried sign-in attempt.
+  const errorRedirect =
+    callbackURL === "/account"
+      ? "/sign-in?error=github"
+      : `/sign-in?error=github&callbackURL=${encodeURIComponent(callbackURL)}`;
+
   return page({
     title: "Sign in",
     body: `
@@ -130,8 +150,8 @@ export function signInPage(error?: string | null): string {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             provider: 'github',
-            callbackURL: '/account',
-            errorCallbackURL: '/sign-in?error=github',
+            callbackURL: ${jsString(callbackURL)},
+            errorCallbackURL: ${jsString(errorRedirect)},
             oauth_query: oauthQuery || undefined
           })
         });
@@ -141,7 +161,7 @@ export function signInPage(error?: string | null): string {
           return;
         }
         button.disabled = false;
-        window.location.href = '/sign-in?error=github';
+        window.location.href = ${jsString(errorRedirect)};
       });
     `
   });
@@ -180,7 +200,10 @@ export function consentPage(clientId: string, scope: string): string {
   });
 }
 
-export function accountPage(session: AppSession): string {
+export function accountPage(
+  session: AppSession,
+  callbackURL = "/account"
+): string {
   const image = session.user.image
     ? `<img class="avatar" src="${escapeHtml(session.user.image)}" alt="" />`
     : "";
@@ -217,7 +240,7 @@ export function accountPage(session: AppSession): string {
           const response = await fetch('/link-social', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ provider: 'github', callbackURL: '/account' })
+            body: JSON.stringify({ provider: 'github', callbackURL: ${jsString(callbackURL)} })
           });
           const data = await response.json().catch(() => null);
           if (data?.url) {

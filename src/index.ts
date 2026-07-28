@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import { createAuth, type Auth } from "./auth";
+import { createAuth, isTrustedCallbackUrl, type Auth } from "./auth";
 import type { AppSession, Env } from "./types";
 import { accountPage, consentPage, signInPage } from "./views";
 
@@ -42,6 +42,15 @@ async function handleAuth(c: Context<HonoEnv>) {
   return c.get("auth").handler(c.req.raw);
 }
 
+function trustedCallbackUrl(
+  c: Context<HonoEnv>,
+  requested: string | undefined
+): string {
+  return requested && isTrustedCallbackUrl(c.env, requested)
+    ? requested
+    : "/account";
+}
+
 app.get("/", async (c) => {
   const session = await getSession(c.get("auth"), c.req.raw);
   return c.redirect(session ? "/account" : "https://fossbilling.org");
@@ -59,7 +68,8 @@ app.get("/sign-in", async (c) => {
   const error = c.req.query("error")
     ? "GitHub sign-in failed. Try again."
     : null;
-  return c.html(signInPage(error));
+  const callbackURL = trustedCallbackUrl(c, c.req.query("callbackURL"));
+  return c.html(signInPage(error, callbackURL));
 });
 
 app.get("/consent", async (c) => {
@@ -78,12 +88,23 @@ app.get("/consent", async (c) => {
 });
 
 app.get("/account", async (c) => {
+  // Lets a linking caller (e.g. extensions' "Reconnect GitHub") send the
+  // user back through its own OIDC flow after linking completes, instead of
+  // stranding them on this page — see accountPage's script for how it's used.
+  // Read and validate before the session check below so it survives an
+  // expired/missing auth session round-tripping through /sign-in too.
+  const callbackURL = trustedCallbackUrl(c, c.req.query("callbackURL"));
+
   const session = await getSession(c.get("auth"), c.req.raw);
   if (!session) {
-    return c.redirect("/sign-in");
+    const query =
+      callbackURL === "/account"
+        ? ""
+        : `?callbackURL=${encodeURIComponent(callbackURL)}`;
+    return c.redirect(`/sign-in${query}`);
   }
 
-  return c.html(accountPage(session));
+  return c.html(accountPage(session, callbackURL));
 });
 
 app.on(authMethods, "/sign-in/social", handleAuth);
