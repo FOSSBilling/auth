@@ -221,7 +221,11 @@ export function accountPage(
         <dd>${escapeHtml(session.user.email)}</dd>
       </dl>
       ${
-        session.user.githubLogin
+        // githubOrgs, not githubLogin — githubLogin is set on every GitHub
+        // sign-in, but githubOrgs stays null until the org-membership fetch
+        // actually succeeds (see githubClaims in auth.ts). Keying this on
+        // githubLogin would hide the button for accounts that still need it.
+        session.user.githubOrgs != null
           ? ""
           : `<p>Grant access to your GitHub organizations so extension developer
              profile claims can be verified automatically.</p>
