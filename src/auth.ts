@@ -46,15 +46,20 @@ function isAdminEmail(env: Env, email?: string | null): boolean {
   return admins.includes(email.toLowerCase());
 }
 
-// Omitted entirely (rather than emitted as null/[]) when a user has never
-// completed a GitHub sign-in since the githubLogin/githubOrgs columns were
-// added — downstream consumers treat a missing claim the same as "unknown",
-// never as "confirmed not a member of anything".
+// github_orgs is omitted entirely (rather than emitted as []) when
+// githubOrgsRaw is still null — the org-membership fetch never actually
+// succeeded, even though githubLogin is already set from the sign-in that
+// attempted it (see fetchActiveOrgLogins in github.ts). Downstream
+// consumers (this repo's own account page, the extensions repo's
+// hasLinkedGithub) key their "needs to reconnect" prompt on this claim
+// being present at all, so defaulting it to [] here would tell them
+// "confirmed zero memberships" and permanently hide the one way those
+// users have to retry.
 function githubClaims(user: Record<string, unknown>) {
   const githubLogin = user.githubLogin as string | null | undefined;
   const githubOrgsRaw = user.githubOrgs as string | null | undefined;
   if (!githubLogin) return {};
-  let githubOrgs: string[] = [];
+  let githubOrgs: string[] | undefined;
   if (githubOrgsRaw) {
     try {
       githubOrgs = JSON.parse(githubOrgsRaw) as string[];
@@ -66,7 +71,9 @@ function githubClaims(user: Record<string, unknown>) {
   }
   return {
     "https://fossbilling.org/claims/github_login": githubLogin,
-    "https://fossbilling.org/claims/github_orgs": githubOrgs
+    ...(githubOrgs !== undefined && {
+      "https://fossbilling.org/claims/github_orgs": githubOrgs
+    })
   };
 }
 

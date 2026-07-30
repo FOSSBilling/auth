@@ -13,6 +13,12 @@ export type AppSession = {
   session: Pick<typeof session.$inferSelect, "id" | "userId" | "expiresAt">;
   user: Pick<
     typeof user.$inferSelect,
-    "id" | "name" | "email" | "emailVerified" | "image" | "githubLogin"
+    | "id"
+    | "name"
+    | "email"
+    | "emailVerified"
+    | "image"
+    | "githubLogin"
+    | "githubOrgs"
   >;
 };
