@@ -104,6 +104,17 @@ app.get("/account", async (c) => {
     return c.redirect(`/sign-in${query}`);
   }
 
+  // A linking caller only ever sends an explicit callbackURL to get GitHub
+  // org access granted, then land back there. If it's already granted
+  // (e.g. from an earlier session), accountPage has no button to show and
+  // no other action for them to take — rendering it here would strand
+  // them exactly like the no-callbackURL redirect above was meant to
+  // avoid. Bounce straight back so the caller's own OIDC round-trip can
+  // pick up the already-linked githubOrgs.
+  if (callbackURL !== "/account" && session.user.githubOrgs != null) {
+    return c.redirect(callbackURL);
+  }
+
   return c.html(accountPage(session, callbackURL));
 });
 
