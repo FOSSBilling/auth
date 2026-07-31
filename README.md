@@ -82,6 +82,10 @@ extending its lifetime.
 OAuth clients must request the dedicated `github` scope to receive the linked GitHub
 claims (`github_login`, `github_orgs`, and `github_orgs_expires_at`). Without that scope,
 those claims are omitted; the central `user_id` claim remains available independently.
+A client's allowed scopes are fixed to whatever list it was created with, so clients
+registered before the `github` scope existed need it backfilled onto their stored
+`scopes` — see `migrations/0003_backfill_github_scope.sql` — or they'll get
+`invalid_scope` when they start requesting it.
 
 4. Apply remote migrations:
 
