@@ -202,7 +202,8 @@ export function consentPage(clientId: string, scope: string): string {
 
 export function accountPage(
   session: AppSession,
-  callbackURL = "/account"
+  callbackURL = "/account",
+  githubOrgsFresh = false
 ): string {
   const image = session.user.image
     ? `<img class="avatar" src="${escapeHtml(session.user.image)}" alt="" />`
@@ -221,11 +222,11 @@ export function accountPage(
         <dd>${escapeHtml(session.user.email)}</dd>
       </dl>
       ${
-        // githubOrgs, not githubLogin — githubLogin is set on every GitHub
-        // sign-in, but githubOrgs stays null until the org-membership fetch
-        // actually succeeds (see githubClaims in auth.ts). Keying this on
-        // githubLogin would hide the button for accounts that still need it.
-        session.user.githubOrgs != null
+        // A fresh organization list is required to hide the reconnect flow.
+        // The auth service deliberately keeps last-known-good data for
+        // diagnostics, but expired data must not strand the user without a
+        // way to refresh their GitHub organization grant.
+        githubOrgsFresh
           ? ""
           : `<p>Grant access to your GitHub organizations so extension developer
              profile claims can be verified automatically.</p>

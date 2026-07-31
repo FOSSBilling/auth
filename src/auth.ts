@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import { getGithubUserInfo, consumeGithubProfile } from "./github";
+import { githubClaims, getGithubOrgsMaxAgeMs } from "./github-claims";
 import type { Env } from "./types";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
@@ -46,40 +47,12 @@ function isAdminEmail(env: Env, email?: string | null): boolean {
   return admins.includes(email.toLowerCase());
 }
 
-// github_orgs is omitted entirely (rather than emitted as []) when
-// githubOrgsRaw is still null — the org-membership fetch never actually
-// succeeded, even though githubLogin is already set from the sign-in that
-// attempted it (see fetchActiveOrgLogins in github.ts). Downstream
-// consumers (this repo's own account page, the extensions repo's
-// hasLinkedGithub) key their "needs to reconnect" prompt on this claim
-// being present at all, so defaulting it to [] here would tell them
-// "confirmed zero memberships" and permanently hide the one way those
-// users have to retry.
-function githubClaims(user: Record<string, unknown>) {
-  const githubLogin = user.githubLogin as string | null | undefined;
-  const githubOrgsRaw = user.githubOrgs as string | null | undefined;
-  if (!githubLogin) return {};
-  let githubOrgs: string[] | undefined;
-  if (githubOrgsRaw) {
-    try {
-      githubOrgs = JSON.parse(githubOrgsRaw) as string[];
-    } catch {
-      // Malformed stored value shouldn't break token/userinfo issuance —
-      // treat it the same as "no orgs" rather than throwing.
-      githubOrgs = [];
-    }
-  }
-  return {
-    "https://fossbilling.org/claims/github_login": githubLogin,
-    ...(githubOrgs !== undefined && {
-      "https://fossbilling.org/claims/github_orgs": githubOrgs
-    })
-  };
-}
-
 export function createAuth(env: Env) {
   const baseURL = getBaseUrl(env);
   const db = drizzle(env.AUTH_DB, { schema });
+  const githubOrgsMaxAgeMs = getGithubOrgsMaxAgeMs(
+    env.GITHUB_ORGS_MAX_AGE_SECONDS
+  );
 
   async function persistGithubProfile(account: {
     accountId: string;
@@ -88,14 +61,18 @@ export function createAuth(env: Env) {
     const profile = consumeGithubProfile(account.accountId);
     if (!profile) return;
     // orgs is null when fetchActiveOrgLogins couldn't complete (rate limit,
-    // transient GitHub error) — leave the existing githubOrgs value alone
-    // rather than overwriting confirmed data with "couldn't tell".
+    // transient GitHub error) — leave the existing githubOrgs value and its
+    // verification time alone rather than overwriting confirmed data with
+    // "couldn't tell" or extending its lifetime.
     await db
       .update(schema.user)
       .set({
         githubLogin: profile.login,
         ...(profile.orgs !== null
-          ? { githubOrgs: JSON.stringify(profile.orgs) }
+          ? {
+              githubOrgs: JSON.stringify(profile.orgs),
+              githubOrgsVerifiedAt: new Date().toISOString()
+            }
           : {})
       })
       .where(eq(schema.user.id, account.userId));
@@ -121,7 +98,12 @@ export function createAuth(env: Env) {
         // Auth runs both through the same input-filtered parser. They're
         // actually written by the databaseHooks below instead.
         githubLogin: { type: "string", required: false, input: false },
-        githubOrgs: { type: "string", required: false, input: false }
+        githubOrgs: { type: "string", required: false, input: false },
+        githubOrgsVerifiedAt: {
+          type: "string",
+          required: false,
+          input: false
+        }
       }
     },
     // Keeps name/image in sync on a repeat sign-in or the explicit re-link
@@ -209,19 +191,19 @@ export function createAuth(env: Env) {
         },
         customIdTokenClaims: ({ user }) => ({
           "https://fossbilling.org/claims/user_id": user.id,
-          ...githubClaims(user)
+          ...githubClaims(user, githubOrgsMaxAgeMs)
         }),
         customAccessTokenClaims: ({ user }) => ({
           ...(user
             ? {
                 "https://fossbilling.org/claims/user_id": user.id,
-                ...githubClaims(user)
+                ...githubClaims(user, githubOrgsMaxAgeMs)
               }
             : {})
         }),
         customUserInfoClaims: ({ user }) => ({
           "https://fossbilling.org/claims/user_id": user.id,
-          ...githubClaims(user)
+          ...githubClaims(user, githubOrgsMaxAgeMs)
         })
       })
     ]

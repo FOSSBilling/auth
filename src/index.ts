@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { createAuth, isTrustedCallbackUrl, type Auth } from "./auth";
+import { getGithubOrgsMaxAgeMs, hasFreshGithubOrgs } from "./github-claims";
 import type { AppSession, Env } from "./types";
 import { accountPage, consentPage, signInPage } from "./views";
 
@@ -104,6 +105,11 @@ app.get("/account", async (c) => {
     return c.redirect(`/sign-in${query}`);
   }
 
+  const githubOrgsFresh = hasFreshGithubOrgs(
+    session.user,
+    getGithubOrgsMaxAgeMs(c.env.GITHUB_ORGS_MAX_AGE_SECONDS)
+  );
+
   // A linking caller only ever sends an explicit callbackURL to get GitHub
   // org access granted, then land back there. If it's already granted
   // (e.g. from an earlier session), accountPage has no button to show and
@@ -111,11 +117,11 @@ app.get("/account", async (c) => {
   // them exactly like the no-callbackURL redirect above was meant to
   // avoid. Bounce straight back so the caller's own OIDC round-trip can
   // pick up the already-linked githubOrgs.
-  if (callbackURL !== "/account" && session.user.githubOrgs != null) {
+  if (callbackURL !== "/account" && githubOrgsFresh) {
     return c.redirect(callbackURL);
   }
 
-  return c.html(accountPage(session, callbackURL));
+  return c.html(accountPage(session, callbackURL, githubOrgsFresh));
 });
 
 app.on(authMethods, "/sign-in/social", handleAuth);

@@ -15,6 +15,13 @@
       "when": 1785228118125,
       "tag": "0001_add_user_github_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785482537099,
+      "tag": "0002_add_github_orgs_verified_at",
+      "breakpoints": true
     }
   ]
 }
