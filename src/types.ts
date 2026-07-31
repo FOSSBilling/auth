@@ -6,6 +6,7 @@ export type Env = {
   BETTER_AUTH_URL?: string;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
+  GITHUB_ORGS_MAX_AGE_SECONDS?: string;
   ADMIN_EMAILS?: string;
 };
 
@@ -20,5 +21,6 @@ export type AppSession = {
     | "image"
     | "githubLogin"
     | "githubOrgs"
+    | "githubOrgsVerifiedAt"
   >;
 };

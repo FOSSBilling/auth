@@ -71,6 +71,14 @@ OAuth clients (create/read/update/delete/list/rotate via `/oauth2/*-client` endp
 Anyone who signs in with GitHub gets an identity, but only these addresses can register
 or modify OAuth clients — see [`clientPrivileges`](./src/auth.ts).
 
+`GITHUB_ORGS_MAX_AGE_SECONDS` controls how long a successful GitHub organization
+membership lookup may be used in the custom `github_orgs` claim. It defaults to 86400
+(24 hours) when absent or invalid. The issuer also emits the absolute RFC3339
+`https://fossbilling.org/claims/github_orgs_expires_at` claim whenever `github_orgs` is
+present; consumers must reject missing or expired organization evidence. A transient
+GitHub failure preserves the last successful list and its original expiry rather than
+extending its lifetime.
+
 4. Apply remote migrations:
 
 ```bash

@@ -2,8 +2,9 @@ import { logger } from "@better-auth/core/env";
 
 // Overrides Better Auth's default GitHub getUserInfo so we can additionally
 // read the user's own org memberships (requires the read:org scope granted
-// in auth.ts) and persist both onto the user row as githubLogin/githubOrgs —
-// see the comment on those columns in db/schema.ts for why.
+// in auth.ts) and persist them onto the user row as githubLogin/githubOrgs,
+// plus a successful-fetch timestamp — see the comment on those columns in
+// db/schema.ts for why.
 //
 // Returning githubLogin/githubOrgs directly on getUserInfo's `user` object
 // would NOT persist them: Better Auth's additionalFields `input: false`

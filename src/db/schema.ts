@@ -17,9 +17,12 @@ export const user = sqliteTable("user", {
   // "active", fetched with the read:org scope so private memberships are
   // included — used downstream (extensions/api repos) to verify developer
   // profile claims. Null until the user completes a GitHub login after this
-  // scope was added.
+  // scope was added. githubOrgsVerifiedAt is updated only after a successful
+  // membership fetch; a failed fetch preserves both the list and timestamp
+  // as last-known-good data.
   githubLogin: text("githubLogin"),
-  githubOrgs: text("githubOrgs")
+  githubOrgs: text("githubOrgs"),
+  githubOrgsVerifiedAt: text("githubOrgsVerifiedAt")
 });
 
 export const session = sqliteTable(
