@@ -79,6 +79,10 @@ present; consumers must reject missing or expired organization evidence. A trans
 GitHub failure preserves the last successful list and its original expiry rather than
 extending its lifetime.
 
+OAuth clients must request the dedicated `github` scope to receive the linked GitHub
+claims (`github_login`, `github_orgs`, and `github_orgs_expires_at`). Without that scope,
+those claims are omitted; the central `user_id` claim remains available independently.
+
 4. Apply remote migrations:
 
 ```bash

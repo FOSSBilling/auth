@@ -6,7 +6,11 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import { getGithubUserInfo, consumeGithubProfile } from "./github";
-import { githubClaims, getGithubOrgsMaxAgeMs } from "./github-claims";
+import {
+  githubClaims,
+  getGithubOrgsMaxAgeMs,
+  GITHUB_SCOPE
+} from "./github-claims";
 import type { Env } from "./types";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
@@ -154,9 +158,15 @@ export function createAuth(env: Env) {
       oauthProvider({
         loginPage: "/sign-in",
         consentPage: "/consent",
-        scopes: ["openid", "profile", "email", "offline_access"],
+        scopes: ["openid", "profile", "email", "offline_access", GITHUB_SCOPE],
         advertisedMetadata: {
-          scopes_supported: ["openid", "profile", "email", "offline_access"],
+          scopes_supported: [
+            "openid",
+            "profile",
+            "email",
+            "offline_access",
+            GITHUB_SCOPE
+          ],
           claims_supported: [
             "sub",
             "iss",
@@ -169,7 +179,11 @@ export function createAuth(env: Env) {
             "name",
             "email",
             "email_verified",
-            "picture"
+            "picture",
+            "https://fossbilling.org/claims/user_id",
+            "https://fossbilling.org/claims/github_login",
+            "https://fossbilling.org/claims/github_orgs",
+            "https://fossbilling.org/claims/github_orgs_expires_at"
           ]
         },
         grantTypes: [
@@ -189,21 +203,21 @@ export function createAuth(env: Env) {
           opaqueAccessToken: "fba_at_",
           refreshToken: "fba_rt_"
         },
-        customIdTokenClaims: ({ user }) => ({
+        customIdTokenClaims: ({ user, scopes }) => ({
           "https://fossbilling.org/claims/user_id": user.id,
-          ...githubClaims(user, githubOrgsMaxAgeMs)
+          ...githubClaims(user, githubOrgsMaxAgeMs, scopes)
         }),
-        customAccessTokenClaims: ({ user }) => ({
+        customAccessTokenClaims: ({ user, scopes }) => ({
           ...(user
             ? {
                 "https://fossbilling.org/claims/user_id": user.id,
-                ...githubClaims(user, githubOrgsMaxAgeMs)
+                ...githubClaims(user, githubOrgsMaxAgeMs, scopes)
               }
             : {})
         }),
-        customUserInfoClaims: ({ user }) => ({
+        customUserInfoClaims: ({ user, scopes }) => ({
           "https://fossbilling.org/claims/user_id": user.id,
-          ...githubClaims(user, githubOrgsMaxAgeMs)
+          ...githubClaims(user, githubOrgsMaxAgeMs, scopes)
         })
       })
     ]
