@@ -168,6 +168,15 @@ export function signInPage(
 }
 
 export function consentPage(clientId: string, scope: string): string {
+  const requestedScopes = (scope.trim() || "openid profile email")
+    .split(/\s+/)
+    .map((requestedScope) =>
+      requestedScope === "github"
+        ? "Linked GitHub identity and organization memberships"
+        : requestedScope
+    )
+    .join(", ");
+
   return page({
     title: "Authorize application",
     body: `
@@ -175,7 +184,7 @@ export function consentPage(clientId: string, scope: string): string {
       <p>An application (<code>${escapeHtml(clientId)}</code>) is requesting access to your FOSSBilling account.</p>
       <dl>
         <dt>Requested scopes</dt>
-        <dd>${escapeHtml(scope || "openid profile email")}</dd>
+        <dd>${escapeHtml(requestedScopes)}</dd>
       </dl>
       <button id="accept-consent" type="button">Authorize</button>
       <button class="secondary" id="deny-consent" type="button">Deny</button>

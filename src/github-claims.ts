@@ -3,6 +3,7 @@ const GITHUB_ORGS_CLAIM = "https://fossbilling.org/claims/github_orgs";
 const GITHUB_ORGS_EXPIRES_AT_CLAIM =
   "https://fossbilling.org/claims/github_orgs_expires_at";
 
+export const GITHUB_SCOPE = "github" as const;
 export const DEFAULT_GITHUB_ORGS_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 type GithubClaimUser = Record<string, unknown>;
@@ -61,8 +62,10 @@ export function hasFreshGithubOrgs(
 export function githubClaims(
   user: GithubClaimUser,
   maxAgeMs: number,
+  scopes: readonly string[],
   now = Date.now()
 ) {
+  if (!scopes.includes(GITHUB_SCOPE)) return {};
   if (typeof user.githubLogin !== "string" || !user.githubLogin) return {};
 
   const claims: Record<string, unknown> = {
