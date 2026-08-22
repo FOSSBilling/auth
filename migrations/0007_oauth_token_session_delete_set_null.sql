@@ -1,4 +1,18 @@
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
+-- D1 enforces foreign key constraints unconditionally: neither
+-- `PRAGMA foreign_keys=OFF` nor `PRAGMA defer_foreign_keys=true` suppress
+-- them here (confirmed empirically, despite
+-- https://developers.cloudflare.com/d1/reference/migrations/#foreign-key-constraints
+-- documenting the latter as the way to do this). Recreating
+-- oauthRefreshToken below would therefore cascade-delete any
+-- oauthAccessToken row still pointing at it through refreshId (ON DELETE
+-- CASCADE), so that link is broken here first and restored once both
+-- tables are back in place.
+CREATE TABLE `__oauthAccessToken_refreshId_backup` (
+	`id` text PRIMARY KEY NOT NULL,
+	`refreshId` text NOT NULL
+);
+--> statement-breakpoint
+INSERT INTO `__oauthAccessToken_refreshId_backup` (`id`, `refreshId`) SELECT `id`, `refreshId` FROM `oauthAccessToken` WHERE `refreshId` IS NOT NULL;--> statement-breakpoint
 CREATE TABLE `__new_oauthAccessToken` (
 	`id` text PRIMARY KEY NOT NULL,
 	`token` text NOT NULL,
@@ -21,10 +35,9 @@ CREATE TABLE `__new_oauthAccessToken` (
 	FOREIGN KEY (`refreshId`) REFERENCES `oauthRefreshToken`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_oauthAccessToken`("id", "token", "clientId", "sessionId", "userId", "referenceId", "authorizationCodeId", "resources", "requestedUserInfoClaims", "refreshId", "expiresAt", "createdAt", "revoked", "confirmation", "scopes") SELECT "id", "token", "clientId", "sessionId", "userId", "referenceId", "authorizationCodeId", "resources", "requestedUserInfoClaims", "refreshId", "expiresAt", "createdAt", "revoked", "confirmation", "scopes" FROM `oauthAccessToken`;--> statement-breakpoint
+INSERT INTO `__new_oauthAccessToken`("id", "token", "clientId", "sessionId", "userId", "referenceId", "authorizationCodeId", "resources", "requestedUserInfoClaims", "refreshId", "expiresAt", "createdAt", "revoked", "confirmation", "scopes") SELECT "id", "token", "clientId", "sessionId", "userId", "referenceId", "authorizationCodeId", "resources", "requestedUserInfoClaims", NULL, "expiresAt", "createdAt", "revoked", "confirmation", "scopes" FROM `oauthAccessToken`;--> statement-breakpoint
 DROP TABLE `oauthAccessToken`;--> statement-breakpoint
 ALTER TABLE `__new_oauthAccessToken` RENAME TO `oauthAccessToken`;--> statement-breakpoint
-PRAGMA foreign_keys=ON;--> statement-breakpoint
 CREATE UNIQUE INDEX `oauthAccessToken_token_unique` ON `oauthAccessToken` (`token`);--> statement-breakpoint
 CREATE INDEX `oauthAccessToken_clientId_idx` ON `oauthAccessToken` (`clientId`);--> statement-breakpoint
 CREATE INDEX `oauthAccessToken_sessionId_idx` ON `oauthAccessToken` (`sessionId`);--> statement-breakpoint
@@ -62,4 +75,6 @@ CREATE UNIQUE INDEX `oauthRefreshToken_token_unique` ON `oauthRefreshToken` (`to
 CREATE INDEX `oauthRefreshToken_clientId_idx` ON `oauthRefreshToken` (`clientId`);--> statement-breakpoint
 CREATE INDEX `oauthRefreshToken_sessionId_idx` ON `oauthRefreshToken` (`sessionId`);--> statement-breakpoint
 CREATE INDEX `oauthRefreshToken_userId_idx` ON `oauthRefreshToken` (`userId`);--> statement-breakpoint
-CREATE INDEX `oauthRefreshToken_authorizationCodeId_idx` ON `oauthRefreshToken` (`authorizationCodeId`);
+CREATE INDEX `oauthRefreshToken_authorizationCodeId_idx` ON `oauthRefreshToken` (`authorizationCodeId`);--> statement-breakpoint
+UPDATE `oauthAccessToken` SET `refreshId` = (SELECT `refreshId` FROM `__oauthAccessToken_refreshId_backup` WHERE `__oauthAccessToken_refreshId_backup`.`id` = `oauthAccessToken`.`id`) WHERE `id` IN (SELECT `id` FROM `__oauthAccessToken_refreshId_backup`);--> statement-breakpoint
+DROP TABLE `__oauthAccessToken_refreshId_backup`;
