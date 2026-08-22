@@ -51,7 +51,14 @@ function isAdminEmail(env: Env, email?: string | null): boolean {
   return admins.includes(email.toLowerCase());
 }
 
-export function createAuth(env: Env) {
+// A structural subset of ExecutionContext, so this doesn't depend on
+// whichever workers-types version generated worker-configuration.d.ts —
+// Hono's own ExecutionContext (c.executionCtx in index.ts) satisfies it.
+type BackgroundTaskContext = {
+  waitUntil(promise: Promise<unknown>): void;
+};
+
+export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
   const baseURL = getBaseUrl(env);
   const db = drizzle(env.AUTH_DB, { schema });
   const githubOrgsMaxAgeMs = getGithubOrgsMaxAgeMs(
@@ -88,6 +95,14 @@ export function createAuth(env: Env) {
     basePath: "/",
     secret: env.BETTER_AUTH_SECRET,
     disabledPaths: ["/token"],
+    advanced: {
+      // Sign-out revokes the session's tokens and can fire back-channel
+      // logout calls to clients — waitUntil keeps those from being cut off
+      // once the response is sent.
+      backgroundTasks: executionCtx
+        ? { handler: (promise) => executionCtx.waitUntil(promise) }
+        : undefined
+    },
     database: drizzleAdapter(db, {
       provider: "sqlite",
       schema,

@@ -13,7 +13,7 @@ const app = new Hono<HonoEnv>({ strict: false });
 const authMethods = ["GET", "POST"];
 
 app.use("*", async (c, next) => {
-  c.set("auth", createAuth(c.env));
+  c.set("auth", createAuth(c.env, c.executionCtx));
   await next();
   c.header("referrer-policy", "no-referrer");
   c.header("x-content-type-options", "nosniff");

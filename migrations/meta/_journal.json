@@ -29,6 +29,34 @@
       "when": 1785520719055,
       "tag": "0003_backfill_github_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787432434484,
+      "tag": "0004_account_issuer_and_oauth_provider_1_7_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1787432442449,
+      "tag": "0005_backfill_account_issuer_and_client_application_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787432491743,
+      "tag": "0006_account_issuer_not_null_and_drop_client_type_public",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1787433309748,
+      "tag": "0007_oauth_token_session_delete_set_null",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,10 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex
+} from "drizzle-orm/sqlite-core";
 
 const id = () => text("id").primaryKey().notNull();
 const timestamp = (name: string) => integer(name, { mode: "timestamp_ms" });
@@ -48,6 +54,10 @@ export const account = sqliteTable(
     id: id(),
     accountId: text("accountId").notNull(),
     providerId: text("providerId").notNull(),
+    // Paired with accountId via the compound unique index below to scope
+    // account identity — GitHub isn't OIDC, so its accounts get the
+    // synthetic `local:oauth:github` issuer rather than a real one.
+    issuer: text("issuer").notNull(),
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -61,7 +71,13 @@ export const account = sqliteTable(
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull()
   },
-  (table) => [index("account_userId_idx").on(table.userId)]
+  (table) => [
+    index("account_userId_idx").on(table.userId),
+    uniqueIndex("account_issuer_accountId_uidx").on(
+      table.issuer,
+      table.accountId
+    )
+  ]
 );
 
 export const verification = sqliteTable(
@@ -82,7 +98,9 @@ export const jwks = sqliteTable("jwks", {
   publicKey: text("publicKey").notNull(),
   privateKey: text("privateKey").notNull(),
   createdAt: timestamp("createdAt").notNull(),
-  expiresAt: timestamp("expiresAt")
+  expiresAt: timestamp("expiresAt"),
+  alg: text("alg"),
+  crv: text("crv")
 });
 
 export const oauthClient = sqliteTable(
@@ -91,11 +109,17 @@ export const oauthClient = sqliteTable(
     id: id(),
     clientId: text("clientId").notNull().unique(),
     clientSecret: text("clientSecret"),
+    // Set when this client was created via a client-metadata-document (CIMD)
+    // discovery source rather than direct/dynamic registration; null means
+    // no trusted discovery provenance.
+    clientDiscoveryId: text("clientDiscoveryId"),
     disabled: boolean("disabled"),
     skipConsent: boolean("skipConsent"),
     enableEndSession: boolean("enableEndSession"),
     subjectType: text("subjectType"),
     scopes: text("scopes"),
+    // Scopes this client may request with the client_credentials grant.
+    clientCredentialsScopes: text("clientCredentialsScopes"),
     userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
     createdAt: timestamp("createdAt"),
     updatedAt: timestamp("updatedAt"),
@@ -110,12 +134,20 @@ export const oauthClient = sqliteTable(
     softwareStatement: text("softwareStatement"),
     redirectUris: text("redirectUris").notNull(),
     postLogoutRedirectUris: text("postLogoutRedirectUris"),
+    backchannelLogoutUri: text("backchannelLogoutUri"),
+    backchannelLogoutSessionRequired: boolean(
+      "backchannelLogoutSessionRequired"
+    ),
     tokenEndpointAuthMethod: text("tokenEndpointAuthMethod"),
+    // Replaces the old `type`/`public` boolean pair.
+    applicationType: text("applicationType"),
+    // A client-supplied JWK Set (as JSON) or, in jwksUri, a URL to fetch one.
+    jwks: text("jwks"),
+    jwksUri: text("jwksUri"),
     grantTypes: text("grantTypes"),
     responseTypes: text("responseTypes"),
-    public: boolean("public"),
-    type: text("type"),
     requirePKCE: boolean("requirePKCE"),
+    dpopBoundAccessTokens: boolean("dpopBoundAccessTokens"),
     referenceId: text("referenceId"),
     metadata: text("metadata")
   },
@@ -130,23 +162,38 @@ export const oauthRefreshToken = sqliteTable(
     clientId: text("clientId")
       .notNull()
       .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    // set null, not cascade: a session ending shouldn't delete the token
+    // rows it issued — introspection and revocation still need to find them.
     sessionId: text("sessionId").references(() => session.id, {
-      onDelete: "cascade"
+      onDelete: "set null"
     }),
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     referenceId: text("referenceId"),
+    authorizationCodeId: text("authorizationCodeId"),
+    // RFC 8707 resource indicators this token is bound to, and the id_token
+    // claims requested at issuance — both null unless the oauthProvider
+    // `resources` option is configured.
+    resources: text("resources"),
+    requestedUserInfoClaims: text("requestedUserInfoClaims"),
     expiresAt: timestamp("expiresAt").notNull(),
     createdAt: timestamp("createdAt").notNull(),
     revoked: timestamp("revoked"),
+    rotatedAt: timestamp("rotatedAt"),
+    rotationReplayResponse: text("rotationReplayResponse"),
+    rotationReplayExpiresAt: timestamp("rotationReplayExpiresAt"),
     authTime: timestamp("authTime"),
+    confirmation: text("confirmation"),
     scopes: text("scopes").notNull()
   },
   (table) => [
     index("oauthRefreshToken_clientId_idx").on(table.clientId),
     index("oauthRefreshToken_sessionId_idx").on(table.sessionId),
-    index("oauthRefreshToken_userId_idx").on(table.userId)
+    index("oauthRefreshToken_userId_idx").on(table.userId),
+    index("oauthRefreshToken_authorizationCodeId_idx").on(
+      table.authorizationCodeId
+    )
   ]
 );
 
@@ -158,23 +205,32 @@ export const oauthAccessToken = sqliteTable(
     clientId: text("clientId")
       .notNull()
       .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    // set null, not cascade — see the same field on oauthRefreshToken above.
     sessionId: text("sessionId").references(() => session.id, {
-      onDelete: "cascade"
+      onDelete: "set null"
     }),
     userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
     referenceId: text("referenceId"),
+    authorizationCodeId: text("authorizationCodeId"),
+    resources: text("resources"),
+    requestedUserInfoClaims: text("requestedUserInfoClaims"),
     refreshId: text("refreshId").references(() => oauthRefreshToken.id, {
       onDelete: "cascade"
     }),
     expiresAt: timestamp("expiresAt").notNull(),
     createdAt: timestamp("createdAt").notNull(),
+    revoked: timestamp("revoked"),
+    confirmation: text("confirmation"),
     scopes: text("scopes").notNull()
   },
   (table) => [
     index("oauthAccessToken_clientId_idx").on(table.clientId),
     index("oauthAccessToken_sessionId_idx").on(table.sessionId),
     index("oauthAccessToken_userId_idx").on(table.userId),
-    index("oauthAccessToken_refreshId_idx").on(table.refreshId)
+    index("oauthAccessToken_refreshId_idx").on(table.refreshId),
+    index("oauthAccessToken_authorizationCodeId_idx").on(
+      table.authorizationCodeId
+    )
   ]
 );
 
@@ -187,6 +243,8 @@ export const oauthConsent = sqliteTable(
       .references(() => oauthClient.clientId, { onDelete: "cascade" }),
     userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
     referenceId: text("referenceId"),
+    resources: text("resources"),
+    requestedUserInfoClaims: text("requestedUserInfoClaims"),
     scopes: text("scopes").notNull(),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull()
@@ -196,3 +254,57 @@ export const oauthConsent = sqliteTable(
     index("oauthConsent_userId_idx").on(table.userId)
   ]
 );
+
+// A protected resource (RFC 8707) the AS issues access tokens for. Unused
+// while oauthProvider's `resources` option is unconfigured, but part of
+// its schema regardless.
+export const oauthResource = sqliteTable("oauthResource", {
+  id: id(),
+  identifier: text("identifier").notNull().unique(),
+  name: text("name").notNull(),
+  accessTokenTtl: integer("accessTokenTtl"),
+  refreshTokenTtl: integer("refreshTokenTtl"),
+  signingAlgorithm: text("signingAlgorithm"),
+  signingKeyId: text("signingKeyId"),
+  allowedScopes: text("allowedScopes"),
+  customClaims: text("customClaims"),
+  dpopBoundAccessTokensRequired: boolean("dpopBoundAccessTokensRequired"),
+  disabled: boolean("disabled"),
+  createdAt: timestamp("createdAt"),
+  updatedAt: timestamp("updatedAt"),
+  policyVersion: integer("policyVersion"),
+  metadata: text("metadata")
+});
+
+// Join table: which clients may request which resources. Only authoritative
+// when oauthProvider's `enforcePerClientResources` is enabled.
+export const oauthClientResource = sqliteTable(
+  "oauthClientResource",
+  {
+    id: id(),
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    resourceId: text("resourceId")
+      .notNull()
+      .references(() => oauthResource.identifier, { onDelete: "cascade" }),
+    metadata: text("metadata"),
+    createdAt: timestamp("createdAt")
+  },
+  (table) => [
+    index("oauthClientResource_clientId_idx").on(table.clientId),
+    index("oauthClientResource_resourceId_idx").on(table.resourceId),
+    uniqueIndex("oauthClientResource_clientId_resourceId_uidx").on(
+      table.clientId,
+      table.resourceId
+    )
+  ]
+);
+
+// Single-use replay guard for private_key_jwt client assertion `jti`
+// values — the row id is a digest of the assertion identifier, so a
+// replayed or concurrent assertion collides on insert.
+export const oauthClientAssertion = sqliteTable("oauthClientAssertion", {
+  id: id(),
+  expiresAt: timestamp("expiresAt").notNull()
+});
