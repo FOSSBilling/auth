@@ -16,8 +16,8 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"*.{json,jsonc,md,ts}\""
   },
   "dependencies": {
-    "@better-auth/oauth-provider": "^1.6.26",
-    "better-auth": "^1.6.22",
+    "@better-auth/oauth-provider": "^1.7.1",
+    "better-auth": "^1.7.1",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27"
   },
@@ -27,5 +27,10 @@
     "prettier": "3.9.6",
     "typescript": "6.0.3",
     "wrangler": "4.124.0"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "fsevents": true,
+    "workerd": true
   }
 }

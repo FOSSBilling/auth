@@ -1,4 +1,5 @@
 import { logger } from "@better-auth/core/env";
+import type { GithubProfile } from "better-auth/social-providers";
 
 // Overrides Better Auth's default GitHub getUserInfo so we can additionally
 // read the user's own org memberships (requires the read:org scope granted
@@ -25,14 +26,6 @@ export function consumeGithubProfile(
   const profile = pendingGithubProfiles.get(accountId);
   pendingGithubProfiles.delete(accountId);
   return profile;
-}
-
-interface GithubProfile {
-  id: number;
-  login: string;
-  name: string | null;
-  email: string | null;
-  avatar_url: string;
 }
 
 interface GithubEmail {
@@ -132,8 +125,11 @@ export async function getGithubUserInfo(token: { accessToken?: string }) {
     });
 
     return {
+      // better-auth resolves the account's provider-assigned id from
+      // `data` (below) via the github provider's `accountSubject`, not from
+      // `user.id` — `user` is only ever applied to the local user row, so
+      // an `id` field here would be inert at best.
       user: {
-        id: String(profile.id),
         name: profile.name || profile.login,
         email,
         image: profile.avatar_url,
