@@ -54,10 +54,9 @@ export const account = sqliteTable(
     id: id(),
     accountId: text("accountId").notNull(),
     providerId: text("providerId").notNull(),
-    // Paired with accountId via the compound unique index below to scope
-    // account identity — GitHub isn't OIDC, so its accounts get the
-    // synthetic `local:oauth:github` issuer rather than a real one.
-    issuer: text("issuer").notNull(),
+    // Account identity is (providerId, accountId), as in Better Auth 1.6.
+    // Better Auth 1.7.0–1.7.2 briefly required an `issuer` column (removed
+    // again in 1.7.3); see migration 0008 which drops it.
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -71,13 +70,7 @@ export const account = sqliteTable(
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull()
   },
-  (table) => [
-    index("account_userId_idx").on(table.userId),
-    uniqueIndex("account_issuer_accountId_uidx").on(
-      table.issuer,
-      table.accountId
-    )
-  ]
+  (table) => [index("account_userId_idx").on(table.userId)]
 );
 
 export const verification = sqliteTable(
