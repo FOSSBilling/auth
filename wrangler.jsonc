@@ -16,6 +16,9 @@
   "workers_dev": false,
   "preview_urls": true,
   "keep_vars": true,
+  "assets": {
+    "directory": "./public/"
+  },
   "vars": {
     "BETTER_AUTH_URL": "https://auth.fossbilling.net",
     "GITHUB_ORGS_MAX_AGE_SECONDS": "86400"

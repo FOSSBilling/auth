@@ -1,10 +1,14 @@
 import type { AppSession } from "./types";
+import { CircleAlert } from "lucide-static";
 
 type PageOptions = {
   title: string;
   body: string;
   script?: string;
+  description?: string;
 };
+
+const DEFAULT_DESCRIPTION = "Central FOSSBilling account authentication.";
 
 // Server-controlled values (client ids, callback URLs) get embedded directly
 // into inline <script> blocks below. JSON.stringify alone doesn't escape
@@ -23,103 +27,41 @@ export function escapeHtml(value: unknown): string {
     .replaceAll("'", "&#039;");
 }
 
-export function page({ title, body, script }: PageOptions): string {
+// Applies the stored theme (matching extensions' localStorage key) before
+// first paint so dark-mode users don't flash the light theme. Listens for
+// the same `basecoat:theme` event extensions dispatches, so a future toggle
+// here would stay in sync without further changes.
+const THEME_SCRIPT = `try{var s=localStorage.getItem('themeMode');if(s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches){document.documentElement.classList.add('dark');}}catch(e{})document.addEventListener('basecoat:theme',function(e){var m=e.detail&&e.detail.mode;var d=m==='dark'?true:m==='light'?false:!document.documentElement.classList.contains('dark');document.documentElement.classList.toggle('dark',d);try{localStorage.setItem('themeMode',d?'dark':'light');}catch(e{})});`;
+
+// Lucide ships no brand logos, so the GitHub mark stays hand-maintained.
+const GITHUB_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.05.77 2.12 0 1.53-.01 2.76-.01 3.14 0 .3.2.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>`;
+
+// Decorative inside alerts that already carry an <h2>, so mark it hidden.
+const ERROR_ICON = CircleAlert.replace("<svg", '<svg aria-hidden="true"');
+
+export function page({
+  title,
+  body,
+  script,
+  description
+}: PageOptions): string {
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)} | FOSSBilling Auth</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        --bg: #f7f8fa;
-        --surface: #ffffff;
-        --text: #1f2937;
-        --muted: #5f6b7a;
-        --border: #d7dde5;
-        --accent: #2563eb;
-        --accent-text: #ffffff;
-        --danger: #b42318;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #111318;
-          --surface: #181b22;
-          --text: #eef2f6;
-          --muted: #a5afbd;
-          --border: #303846;
-          --accent: #5b8def;
-          --accent-text: #08111f;
-        }
-      }
-      * { box-sizing: border-box; }
-      body {
-        min-height: 100vh;
-        margin: 0;
-        display: grid;
-        place-items: center;
-        background: var(--bg);
-        color: var(--text);
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        line-height: 1.5;
-      }
-      main {
-        width: min(100% - 32px, 440px);
-        padding: 28px;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: var(--surface);
-      }
-      h1 { margin: 0 0 8px; font-size: 1.35rem; line-height: 1.2; }
-      p { margin: 0 0 18px; color: var(--muted); }
-      dl { margin: 18px 0; }
-      dt { color: var(--muted); font-size: 0.875rem; }
-      dd { margin: 0 0 12px; overflow-wrap: anywhere; }
-      button, .button {
-        width: 100%;
-        min-height: 44px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        border: 1px solid transparent;
-        border-radius: 6px;
-        background: var(--accent);
-        color: var(--accent-text);
-        cursor: pointer;
-        font: inherit;
-        font-weight: 600;
-        text-decoration: none;
-      }
-      button + button, button + .button, .button + button, .button + .button,
-      #link-github-orgs-error + button {
-        margin-top: 10px;
-      }
-      /* The error paragraph sits between the link/refresh button and sign
-      out, breaking the adjacent-button selectors above — keep sign out
-      spaced and the visible error off the buttons. */
-      #link-github-orgs-error:not([hidden]) {
-        margin: 10px 0 0;
-      }
-      button.secondary {
-        background: transparent;
-        color: var(--text);
-        border-color: var(--border);
-      }
-      .error { color: var(--danger); }
-      .avatar {
-        width: 56px;
-        height: 56px;
-        border-radius: 50%;
-        object-fit: cover;
-        border: 1px solid var(--border);
-        margin-bottom: 16px;
-      }
-    </style>
+    <meta name="description" content="${escapeHtml(description ?? DEFAULT_DESCRIPTION)}" />
+    <!-- Hex approximations of the Vega --background token (oklch(100% 0 0)
+         light / oklch(14.5% 0 0) dark) from src/styles.css. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>${THEME_SCRIPT}</script>
+    <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main>${body}</main>
+  <body class="min-h-screen grid place-items-center bg-background text-foreground antialiased p-4">
+    <main class="w-full max-w-md">${body}</main>
     ${script ? `<script>(function () {${script}})();</script>` : ""}
   </body>
 </html>`;
@@ -141,10 +83,16 @@ export function signInPage(
   return page({
     title: "Sign in",
     body: `
-      <h1>Sign in to FOSSBilling</h1>
-      <p>Use your GitHub account to continue.</p>
-      ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
-      <button id="github-sign-in" type="button">Continue with GitHub</button>
+      <div class="card">
+        <header>
+          <h2>Sign in to FOSSBilling</h2>
+          <p>Use your GitHub account to continue.</p>
+        </header>
+        <section class="grid gap-4">
+          ${error ? `<div class="alert" data-variant="destructive">${ERROR_ICON}<h2>Sign-in failed</h2><section>${escapeHtml(error)}</section></div>` : ""}
+          <button id="github-sign-in" type="button" class="btn w-full">${GITHUB_ICON}Continue with GitHub</button>
+        </section>
+      </div>
     `,
     script: `
       const button = document.getElementById('github-sign-in');
@@ -187,14 +135,20 @@ export function consentPage(clientId: string, scope: string): string {
   return page({
     title: "Authorize application",
     body: `
-      <h1>Authorize application</h1>
-      <p>An application (<code>${escapeHtml(clientId)}</code>) is requesting access to your FOSSBilling account.</p>
-      <dl>
-        <dt>Requested scopes</dt>
-        <dd>${escapeHtml(requestedScopes)}</dd>
-      </dl>
-      <button id="accept-consent" type="button">Authorize</button>
-      <button class="secondary" id="deny-consent" type="button">Deny</button>
+      <div class="card">
+        <header>
+          <h2>Authorize application</h2>
+          <p>An application (<code>${escapeHtml(clientId)}</code>) is requesting access to your FOSSBilling account.</p>
+        </header>
+        <section>
+          <p class="text-sm text-muted-foreground">Requested scopes</p>
+          <p class="text-sm break-words">${escapeHtml(requestedScopes)}</p>
+        </section>
+        <footer class="flex-col gap-2">
+          <button id="accept-consent" type="button" class="btn w-full">Authorize</button>
+          <button id="deny-consent" type="button" class="btn w-full" data-variant="outline">Deny</button>
+        </footer>
+      </div>
     `,
     script: `
       async function submitConsent(accept) {
@@ -221,50 +175,59 @@ export function accountPage(
   callbackURL = "/account",
   githubOrgsFresh = false
 ): string {
+  const fallbackInitials = (session.user.name || session.user.email || "?")
+    .trim()
+    .slice(0, 2)
+    .toUpperCase();
   const image = session.user.image
-    ? `<img class="avatar" src="${escapeHtml(session.user.image)}" alt="" />`
+    ? `<span class="avatar" data-size="lg"><img src="${escapeHtml(session.user.image)}" alt="" /><span>${escapeHtml(fallbackInitials)}</span></span>`
     : "";
+
+  // Freshness alone must not hide the reconnect flow: a fresh-but-empty
+  // snapshot (granted after the last sign-in, or an org the OAuth App
+  // was never granted) still blocks org profile creation with
+  // GITHUB_MISMATCH, and plain re-login never re-fetches. When a linking
+  // caller is present, always offer an explicit refresh alongside the
+  // continue path so a specific missing org can be granted on GitHub.
+  const orgsBlock = !githubOrgsFresh
+    ? `<p class="text-sm text-muted-foreground">Grant access to your GitHub organizations so extension developer profile claims can be verified automatically.</p>
+       <button id="link-github-orgs" type="button" class="btn w-full">Grant GitHub org access</button>
+       <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub linking failed</h2><section></section></div>`
+    : callbackURL !== "/account"
+      ? `<p class="text-sm text-muted-foreground">GitHub organization access looks up to date, but a specific organization can still be missing if it was granted in GitHub after your last sign-in. Use refresh to grant it on GitHub, or continue back.</p>
+         <a href="${escapeHtml(callbackURL)}" class="btn w-full" data-variant="secondary">Continue</a>
+         <button id="link-github-orgs" type="button" class="btn w-full" data-variant="outline">Refresh GitHub org access</button>
+         <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub linking failed</h2><section></section></div>`
+      : "";
 
   return page({
     title: "Account",
     body: `
-      ${image}
-      <h1>${escapeHtml(session.user.name || session.user.email)}</h1>
-      <p>This is your central FOSSBilling account.</p>
-      <dl>
-        <dt>User ID</dt>
-        <dd>${escapeHtml(session.user.id)}</dd>
-        <dt>Email</dt>
-        <dd>${escapeHtml(session.user.email)}</dd>
-      </dl>
-      ${
-        // Freshness alone must not hide the reconnect flow: a fresh-but-empty
-        // snapshot (granted after the last sign-in, or an org the OAuth App
-        // was never granted) still blocks org profile creation with
-        // GITHUB_MISMATCH, and plain re-login never re-fetches. When a linking
-        // caller is present, always offer an explicit refresh alongside the
-        // continue path so a specific missing org can be granted on GitHub.
-        !githubOrgsFresh
-          ? `<p>Grant access to your GitHub organizations so extension developer
-             profile claims can be verified automatically.</p>
-             <button id="link-github-orgs" type="button">Grant GitHub org access</button>
-             <p class="error" id="link-github-orgs-error" hidden></p>`
-          : callbackURL !== "/account"
-            ? `<p>GitHub organization access looks up to date, but a specific
-               organization can still be missing if it was granted in GitHub
-               after your last sign-in. Use refresh to grant it on GitHub, or
-               continue back.</p>
-               <a class="button secondary" href="${escapeHtml(callbackURL)}">Continue</a>
-               <button id="link-github-orgs" type="button">Refresh GitHub org access</button>
-               <p class="error" id="link-github-orgs-error" hidden></p>`
-            : ""
-      }
-      <button id="sign-out" type="button">Sign out</button>
+      <div class="card">
+        <header>
+          ${image}
+          <h2>${escapeHtml(session.user.name || session.user.email)}</h2>
+          <p>This is your central FOSSBilling account.</p>
+        </header>
+        <section class="grid gap-4">
+          <div class="grid gap-1">
+            <p class="text-sm text-muted-foreground">User ID</p>
+            <p class="text-sm break-all">${escapeHtml(session.user.id)}</p>
+            <p class="text-sm text-muted-foreground mt-2">Email</p>
+            <p class="text-sm break-all">${escapeHtml(session.user.email)}</p>
+          </div>
+          ${orgsBlock}
+        </section>
+        <footer class="flex-col gap-2">
+          <button id="sign-out" type="button" class="btn w-full" data-variant="outline">Sign out</button>
+        </footer>
+      </div>
     `,
     script: `
       document.getElementById('link-github-orgs')?.addEventListener('click', async (e) => {
         const button = e.currentTarget;
         const errorEl = document.getElementById('link-github-orgs-error');
+        const errorSection = errorEl?.querySelector('section');
         button.disabled = true;
         if (errorEl) errorEl.hidden = true;
         try {
@@ -279,12 +242,12 @@ export function accountPage(
             return;
           }
           if (errorEl) {
-            errorEl.textContent = data?.message || 'Unable to start GitHub linking. Try again.';
+            if (errorSection) errorSection.textContent = data?.message || 'Unable to start GitHub linking. Try again.';
             errorEl.hidden = false;
           }
         } catch {
           if (errorEl) {
-            errorEl.textContent = 'Unable to start GitHub linking. Try again.';
+            if (errorSection) errorSection.textContent = 'Unable to start GitHub linking. Try again.';
             errorEl.hidden = false;
           }
         }
