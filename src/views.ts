@@ -60,8 +60,8 @@ export function page({
     <script>${THEME_SCRIPT}</script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="min-h-screen grid place-items-center bg-background text-foreground antialiased p-4">
-    <main class="w-full max-w-md">${body}</main>
+  <body class="min-h-screen grid place-items-center bg-background bg-linear-to-b from-muted to-background text-foreground antialiased p-4">
+    <main class="w-full max-w-sm">${body}</main>
     ${script ? `<script>(function () {${script}})();</script>` : ""}
   </body>
 </html>`;
@@ -81,15 +81,15 @@ export function signInPage(
       : `/sign-in?error=github&callbackURL=${encodeURIComponent(callbackURL)}`;
 
   return page({
-    title: "Sign in",
+    title: "Sign In",
     body: `
       <div class="card">
         <header>
-          <h2>Sign in to FOSSBilling</h2>
+          <h2>Sign In to FOSSBilling</h2>
           <p>Use your GitHub account to continue.</p>
         </header>
         <section class="grid gap-4">
-          ${error ? `<div class="alert" data-variant="destructive">${ERROR_ICON}<h2>Sign-in failed</h2><section>${escapeHtml(error)}</section></div>` : ""}
+          ${error ? `<div class="alert" data-variant="destructive">${ERROR_ICON}<h2>Sign-In Failed</h2><section>${escapeHtml(error)}</section></div>` : ""}
           <button id="github-sign-in" type="button" class="btn w-full">${GITHUB_ICON}Continue with GitHub</button>
         </section>
       </div>
@@ -133,11 +133,11 @@ export function consentPage(clientId: string, scope: string): string {
     .join(", ");
 
   return page({
-    title: "Authorize application",
+    title: "Authorize Application",
     body: `
       <div class="card">
         <header>
-          <h2>Authorize application</h2>
+          <h2>Authorize Application</h2>
           <p>An application (<code>${escapeHtml(clientId)}</code>) is requesting access to your FOSSBilling account.</p>
         </header>
         <section>
@@ -191,13 +191,13 @@ export function accountPage(
   // continue path so a specific missing org can be granted on GitHub.
   const orgsBlock = !githubOrgsFresh
     ? `<p class="text-sm text-muted-foreground">Grant access to your GitHub organizations so extension developer profile claims can be verified automatically.</p>
-       <button id="link-github-orgs" type="button" class="btn w-full">Grant GitHub org access</button>
-       <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub linking failed</h2><section></section></div>`
+       <button id="link-github-orgs" type="button" class="btn w-full">Grant GitHub Org Access</button>
+       <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>`
     : callbackURL !== "/account"
       ? `<p class="text-sm text-muted-foreground">GitHub organization access looks up to date, but a specific organization can still be missing if it was granted in GitHub after your last sign-in. Use refresh to grant it on GitHub, or continue back.</p>
          <a href="${escapeHtml(callbackURL)}" class="btn w-full" data-variant="secondary">Continue</a>
-         <button id="link-github-orgs" type="button" class="btn w-full" data-variant="outline">Refresh GitHub org access</button>
-         <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub linking failed</h2><section></section></div>`
+         <button id="link-github-orgs" type="button" class="btn w-full" data-variant="outline">Refresh GitHub Org Access</button>
+         <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>`
       : "";
 
   return page({
@@ -219,7 +219,7 @@ export function accountPage(
           ${orgsBlock}
         </section>
         <footer class="flex-col gap-2">
-          <button id="sign-out" type="button" class="btn w-full" data-variant="outline">Sign out</button>
+          <button id="sign-out" type="button" class="btn w-full" data-variant="outline">Sign Out</button>
         </footer>
       </div>
     `,

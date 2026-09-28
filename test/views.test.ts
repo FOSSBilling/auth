@@ -40,9 +40,9 @@ test("escapeHtml escapes markup and quotes", () => {
 });
 
 test("page shell links the stylesheet, favicon and meta", () => {
-  const html = page({ title: "Sign in", body: "<p>hi</p>" });
+  const html = page({ title: "Sign In", body: "<p>hi</p>" });
   assert.match(html, /^<!doctype html>/);
-  assert.ok(html.includes("<title>Sign in | FOSSBilling Auth</title>"));
+  assert.ok(html.includes("<title>Sign In | FOSSBilling Auth</title>"));
   assert.ok(
     html.includes('<link rel="stylesheet" href="/styles.css" />'),
     "links the static stylesheet instead of inlining CSS"
@@ -56,6 +56,8 @@ test("page shell links the stylesheet, favicon and meta", () => {
   assert.ok(html.includes('name="description"'));
   assert.ok(html.includes('name="theme-color"'));
   assert.ok(html.includes("themeMode"), "includes the theme init script");
+  assert.ok(html.includes("max-w-sm"), "constrains the card width");
+  assert.ok(html.includes("bg-linear-to-b"), "renders the backdrop gradient");
   assert.ok(!html.includes("(function () {"), "omits page script when absent");
 });
 
@@ -132,7 +134,7 @@ test("consentPage falls back to default scopes", () => {
 test("accountPage shows the grant flow when orgs are stale", () => {
   const html = accountPage(fakeSession(), "/account", false);
   assert.ok(html.includes('class="card"'));
-  assert.ok(html.includes("Grant GitHub org access"));
+  assert.ok(html.includes("Grant GitHub Org Access"));
   assert.ok(html.includes('id="link-github-orgs-error"'));
 });
 
@@ -143,7 +145,7 @@ test("accountPage shows continue and refresh for a fresh linking caller", () => 
     true
   );
   assert.ok(html.includes(">Continue</a>"));
-  assert.ok(html.includes("Refresh GitHub org access"));
+  assert.ok(html.includes("Refresh GitHub Org Access"));
 });
 
 test("accountPage shows neither button when fresh with no caller", () => {
