@@ -110,17 +110,12 @@ app.get("/account", async (c) => {
     getGithubOrgsMaxAgeMs(c.env.GITHUB_ORGS_MAX_AGE_SECONDS)
   );
 
-  // A linking caller only ever sends an explicit callbackURL to get GitHub
-  // org access granted, then land back there. If it's already granted
-  // (e.g. from an earlier session), accountPage has no button to show and
-  // no other action for them to take — rendering it here would strand
-  // them exactly like the no-callbackURL redirect above was meant to
-  // avoid. Bounce straight back so the caller's own OIDC round-trip can
-  // pick up the already-linked githubOrgs.
-  if (callbackURL !== "/account" && githubOrgsFresh) {
-    return c.redirect(callbackURL);
-  }
-
+  // A linking caller sends an explicit callbackURL to grant GitHub org access,
+  // then land back there via its own OIDC round-trip. Do not bounce straight
+  // back when the snapshot is fresh: fresh-but-incomplete (e.g. org granted
+  // in GitHub after the last sign-in, never re-fetched) still blocks org
+  // profile creation, and accountPage now offers both Continue and Refresh
+  // for that case so the user is never stranded without a re-link path.
   return c.html(accountPage(session, callbackURL, githubOrgsFresh));
 });
 
