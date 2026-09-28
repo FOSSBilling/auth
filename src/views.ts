@@ -231,16 +231,26 @@ export function accountPage(
         <dd>${escapeHtml(session.user.email)}</dd>
       </dl>
       ${
-        // A fresh organization list is required to hide the reconnect flow.
-        // The auth service deliberately keeps last-known-good data for
-        // diagnostics, but expired data must not strand the user without a
-        // way to refresh their GitHub organization grant.
-        githubOrgsFresh
-          ? ""
-          : `<p>Grant access to your GitHub organizations so extension developer
+        // Freshness alone must not hide the reconnect flow: a fresh-but-empty
+        // snapshot (granted after the last sign-in, or an org the OAuth App
+        // was never granted) still blocks org profile creation with
+        // GITHUB_MISMATCH, and plain re-login never re-fetches. When a linking
+        // caller is present, always offer an explicit refresh alongside the
+        // continue path so a specific missing org can be granted on GitHub.
+        !githubOrgsFresh
+          ? `<p>Grant access to your GitHub organizations so extension developer
              profile claims can be verified automatically.</p>
              <button id="link-github-orgs" type="button">Grant GitHub org access</button>
              <p class="error" id="link-github-orgs-error" hidden></p>`
+          : callbackURL !== "/account"
+            ? `<p>GitHub organization access looks up to date, but a specific
+               organization can still be missing if it was granted in GitHub
+               after your last sign-in. Use refresh to grant it on GitHub, or
+               continue back.</p>
+               <a class="button secondary" href="${escapeHtml(callbackURL)}">Continue</a>
+               <button id="link-github-orgs" type="button">Refresh GitHub org access</button>
+               <p class="error" id="link-github-orgs-error" hidden></p>`
+            : ""
       }
       <button id="sign-out" type="button">Sign out</button>
     `,
