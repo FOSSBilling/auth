@@ -92,8 +92,15 @@ export function page({ title, body, script }: PageOptions): string {
         font-weight: 600;
         text-decoration: none;
       }
-      button + button, button + .button, .button + button, .button + .button {
+      button + button, button + .button, .button + button, .button + .button,
+      #link-github-orgs-error + button {
         margin-top: 10px;
+      }
+      /* The error paragraph sits between the link/refresh button and sign
+      out, breaking the adjacent-button selectors above — keep sign out
+      spaced and the visible error off the buttons. */
+      #link-github-orgs-error:not([hidden]) {
+        margin: 10px 0 0;
       }
       button.secondary {
         background: transparent;
