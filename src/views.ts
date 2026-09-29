@@ -67,7 +67,7 @@ export function page({
       <div class="flex items-center">
         <img src="/logo-light.svg" alt="FOSSBilling" class="h-8 w-auto dark:hidden" />
         <img src="/logo-dark.svg" alt="" aria-hidden="true" class="h-8 w-auto hidden dark:block" />
-        <span class="ml-3 pl-3 border-s text-sm font-semibold uppercase tracking-wider">Account</span>
+        <span class="ml-3 pl-3 border-s dark:border-white/20 text-sm font-semibold uppercase tracking-wider">Account</span>
         <span class="ml-2 badge" data-variant="secondary">beta</span>
       </div>
       <div class="w-full">${body}</div>

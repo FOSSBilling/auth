@@ -90,6 +90,10 @@ test("page shell renders the brand lockup and footer", () => {
     "labels the lockup with the system name"
   );
   assert.ok(
+    html.includes("dark:border-white/20"),
+    "keeps the separator visible in dark mode"
+  );
+  assert.ok(
     html.includes('<span class="ml-2 badge" data-variant="secondary">beta</span>'),
     "marks the system as beta like extensions"
   );
