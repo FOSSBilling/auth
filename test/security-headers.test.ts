@@ -13,12 +13,16 @@ const source = readFileSync(
 test("CSP allowlists the Cloudflare Web Analytics beacon", () => {
   assert.ok(
     source.includes(
-      "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com"
+      "script-src 'self' 'nonce-${nonce}' https://static.cloudflareinsights.com"
     ),
-    "beacon script can load"
+    "beacon script can load alongside the nonce"
   );
   assert.ok(
     source.includes("connect-src 'self' https://cloudflareinsights.com"),
     "beacon pings can be sent"
   );
+});
+
+test("CSP drops 'unsafe-inline' in favour of the per-request nonce", () => {
+  assert.ok(!source.includes("'unsafe-inline'"));
 });

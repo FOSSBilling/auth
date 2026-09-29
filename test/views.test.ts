@@ -4,6 +4,7 @@ import type { AppSession } from "../src/types.ts";
 import {
   accountPage,
   consentPage,
+  errorPage,
   escapeHtml,
   page,
   signInPage
@@ -40,7 +41,11 @@ test("escapeHtml escapes markup and quotes", () => {
 });
 
 test("page shell links the stylesheet, favicon and meta", () => {
-  const html = page({ title: "Sign In", body: "<p>hi</p>" });
+  const html = page({
+    title: "Sign In",
+    body: "<p>hi</p>",
+    nonce: "c3BpZHVrZW5vbmNl"
+  });
   assert.match(html, /^<!doctype html>/);
   assert.ok(html.includes("<title>Sign In | FOSSBilling Auth</title>"));
   assert.ok(
@@ -75,7 +80,11 @@ test("page shell links the stylesheet, favicon and meta", () => {
 });
 
 test("page shell renders the brand lockup and footer", () => {
-  const html = page({ title: "Sign In", body: "<p>hi</p>" });
+  const html = page({
+    title: "Sign In",
+    body: "<p>hi</p>",
+    nonce: "c3BpZHVrZW5vbmNl"
+  });
   assert.ok(
     html.includes('<img src="/logo-light.svg" alt="FOSSBilling"'),
     "renders the light wordmark with an accessible name"
@@ -112,15 +121,44 @@ test("page escapes title and description", () => {
   const html = page({
     title: `A&B <"test">`,
     body: "",
-    description: `Desc <"quoted">`
+    description: `Desc <"quoted">`,
+    nonce: "c3BpZHVrZW5vbmNl"
   });
   assert.ok(html.includes("<title>A&amp;B &lt;&quot;test&quot;&gt;"));
   assert.ok(html.includes('content="Desc &lt;&quot;quoted&quot;&gt;"'));
 });
 
 test("page includes the page script when provided", () => {
-  const html = page({ title: "T", body: "", script: "window.x = 1;" });
-  assert.ok(html.includes("<script>(function () {window.x = 1;})();</script>"));
+  const html = page({
+    title: "T",
+    body: "",
+    script: "window.x = 1;",
+    nonce: "c3BpZHVrZW5vbmNl"
+  });
+  assert.ok(
+    html.includes(
+      '<script nonce="c3BpZHVrZW5vbmNl">(function () {window.x = 1;})();</script>'
+    )
+  );
+});
+
+test("inline scripts carry the CSP nonce", () => {
+  const html = page({
+    title: "T",
+    body: "",
+    script: "window.x = 1;",
+    nonce: "c3BpZHVrZW5vbmNl"
+  });
+  assert.ok(
+    html.includes('<script nonce="c3BpZHVrZW5vbmNl">'),
+    "theme init script is nonced"
+  );
+  assert.equal(
+    html.match(/<script nonce="c3BpZHVrZW5vbmNl">/g)?.length,
+    2,
+    "both inline scripts are nonced"
+  );
+  assert.ok(!html.includes("<script>"), "no un-nonced inline scripts");
 });
 
 test("signInPage renders the GitHub button without an error", () => {
@@ -161,6 +199,48 @@ test("signInPage threads callbackURL through the script safely", () => {
     "escapes < in embedded script strings"
   );
   assert.ok(!injected.includes("alert(1)</script>"));
+});
+
+test("page builders thread the nonce onto their inline scripts", () => {
+  const nonce = "c3BpZHVrZW5vbmNl";
+  for (const html of [
+    signInPage(null, "/account", nonce),
+    consentPage("c1", "openid", nonce),
+    accountPage(fakeSession(), "/account", false, nonce)
+  ]) {
+    assert.ok(html.includes('<script nonce="c3BpZHVrZW5vbmNl">'));
+  }
+});
+
+test("errorPage renders the OAuth error code and description", () => {
+  const html = errorPage(
+    "invalid_client",
+    "client_id is required",
+    "c3BpZHVrZW5vbmNl"
+  );
+  assert.ok(html.includes("<title>Authorization Error |"));
+  assert.ok(html.includes('data-variant="destructive"'));
+  assert.ok(html.includes("client_id is required"));
+  assert.ok(html.includes(">invalid_client</code>"));
+  assert.ok(html.includes('href="/sign-in"'), "offers a way back");
+  assert.ok(html.includes('<script nonce="c3BpZHVrZW5vbmNl">'));
+});
+
+test("errorPage falls back when the params are missing", () => {
+  const html = errorPage(null, null, "c3BpZHVrZW5vbmNl");
+  assert.ok(html.includes("Unknown error"));
+  assert.ok(html.includes(">unknown_error</code>"));
+});
+
+test("errorPage escapes attacker-controlled query params", () => {
+  const html = errorPage(
+    "<script>alert(1)</script>",
+    `<img src=x onerror=alert(1)>`,
+    "c3BpZHVrZW5vbmNl"
+  );
+  assert.ok(html.includes("&lt;img src=x onerror=alert(1)&gt;"));
+  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;</code>"));
+  assert.ok(!html.includes("<script>alert(1)</script>"));
 });
 
 test("consentPage escapes the client id and maps scopes to chips", () => {
