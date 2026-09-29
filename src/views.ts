@@ -6,6 +6,7 @@ type PageOptions = {
   body: string;
   script?: string;
   description?: string;
+  nonce: string;
 };
 
 const DEFAULT_DESCRIPTION = "Central FOSSBilling account authentication.";
@@ -47,7 +48,8 @@ export function page({
   title,
   body,
   script,
-  description
+  description,
+  nonce
 }: PageOptions): string {
   return `<!doctype html>
 <html lang="en">
@@ -62,7 +64,7 @@ export function page({
          near-black dark). Keep in sync with src/styles.css. -->
     <meta name="theme-color" content="#fafaf9" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <script>${THEME_SCRIPT}</script>
+    <script nonce="${escapeHtml(nonce)}">${THEME_SCRIPT}</script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="min-h-screen grid place-items-center bg-background bg-linear-to-b from-background to-muted text-foreground p-4">
@@ -76,14 +78,15 @@ export function page({
       <div class="w-full">${body}</div>
       <p class="text-sm text-muted-foreground">&copy; 2026 &mdash; The FOSSBilling project.</p>
     </main>
-    ${script ? `<script>(function () {${script}})();</script>` : ""}
+    ${script ? `<script nonce="${escapeHtml(nonce)}">(function () {${script}})();</script>` : ""}
   </body>
 </html>`;
 }
 
 export function signInPage(
   error?: string | null,
-  callbackURL = "/account"
+  callbackURL = "/account",
+  nonce = ""
 ): string {
   // Preserved across the error-retry and no-op fallback redirects below too,
   // so a caller's callbackURL (e.g. extensions' reconnect flow, threaded
@@ -132,11 +135,16 @@ export function signInPage(
         button.disabled = false;
         window.location.href = ${jsString(errorRedirect)};
       });
-    `
+    `,
+    nonce
   });
 }
 
-export function consentPage(clientId: string, scope: string): string {
+export function consentPage(
+  clientId: string,
+  scope: string,
+  nonce = ""
+): string {
   // Short chip labels per scope; the github grant's wider meaning survives
   // as a tooltip since badge text truncates past ~20rem.
   const scopeChip = (requestedScope: string): string => {
@@ -199,14 +207,45 @@ export function consentPage(clientId: string, scope: string): string {
       }
       document.getElementById('accept-consent')?.addEventListener('click', () => submitConsent(true));
       document.getElementById('deny-consent')?.addEventListener('click', () => submitConsent(false));
-    `
+    `,
+    nonce
+  });
+}
+
+// Landing page for authorization failures that must not redirect to the
+// client (unknown client_id, invalid redirect_uri) — better-auth's
+// oauthProvider sends `error` and `error_description` query params here.
+export function errorPage(
+  error?: string | null,
+  description?: string | null,
+  nonce = ""
+): string {
+  return page({
+    title: "Authorization Error",
+    body: `
+      <div class="card">
+        <header>
+          <h2>Authorization Failed</h2>
+          <p>The sign-in request could not be completed.</p>
+        </header>
+        <section class="grid gap-4">
+          <div class="alert" data-variant="destructive">${ERROR_ICON}<h2>Authorization Error</h2><section>${escapeHtml(description || error || "Unknown error")}</section></div>
+          <p class="text-sm text-muted-foreground">Error code: <code class="bg-muted rounded px-1.5 py-0.5 text-sm font-mono">${escapeHtml(error || "unknown_error")}</code></p>
+        </section>
+        <footer class="flex-col gap-2">
+          <a href="/sign-in" class="btn w-full">Back to Sign In</a>
+        </footer>
+      </div>
+    `,
+    nonce
   });
 }
 
 export function accountPage(
   session: AppSession,
   callbackURL = "/account",
-  githubOrgsFresh = false
+  githubOrgsFresh = false,
+  nonce = ""
 ): string {
   const fallbackInitials = (session.user.name || session.user.email || "?")
     .trim()
@@ -309,6 +348,7 @@ export function accountPage(
         });
         window.location.href = '/sign-in';
       });
-    `
+    `,
+    nonce
   });
 }

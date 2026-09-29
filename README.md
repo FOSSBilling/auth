@@ -24,10 +24,10 @@ Set the GitHub OAuth callback URL to:
 http://localhost:8787/callback/github
 ```
 
-Create the local D1 database and apply migrations:
+Apply migrations to the local D1 database (miniflare creates it from the
+`AUTH_DB` binding in `wrangler.jsonc` — no `wrangler d1 create` needed):
 
 ```bash
-npx wrangler d1 create fossbilling-auth
 npm run db:migrate:local
 ```
 

@@ -2,26 +2,39 @@ import { Hono, type Context } from "hono";
 import { createAuth, isTrustedCallbackUrl, type Auth } from "./auth";
 import { getGithubOrgsMaxAgeMs, hasFreshGithubOrgs } from "./github-claims";
 import type { AppSession, Env } from "./types";
-import { accountPage, consentPage, signInPage } from "./views";
+import { accountPage, consentPage, errorPage, signInPage } from "./views";
 
 type HonoEnv = {
   Bindings: Env;
-  Variables: { auth: Auth };
+  Variables: { auth: Auth; cspNonce: string };
 };
 
 const app = new Hono<HonoEnv>({ strict: false });
 const authMethods = ["GET", "POST"];
 
+// CSP nonces must be unique per response.
+function newNonce(): string {
+  return btoa(
+    String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))
+  );
+}
+
+// No inline-script fallback is allowlisted: every inline <script> this
+// worker renders carries the per-request nonce instead. The Web Analytics
+// beacon is an external script from an allowlisted host, so it needs no nonce.
+function contentSecurityPolicy(nonce: string): string {
+  return `default-src 'none'; script-src 'self' 'nonce-${nonce}' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' https: data:; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`;
+}
+
 app.use("*", async (c, next) => {
   c.set("auth", createAuth(c.env, c.executionCtx));
+  const cspNonce = newNonce();
+  c.set("cspNonce", cspNonce);
   await next();
   c.header("referrer-policy", "no-referrer");
   c.header("x-content-type-options", "nosniff");
   c.header("x-frame-options", "DENY");
-  c.header(
-    "content-security-policy",
-    "default-src 'none'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' https: data:; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
-  );
+  c.header("content-security-policy", contentSecurityPolicy(cspNonce));
   c.header(
     "permissions-policy",
     "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()"
@@ -70,7 +83,7 @@ app.get("/sign-in", async (c) => {
     ? "GitHub sign-in failed. Try again."
     : null;
   const callbackURL = trustedCallbackUrl(c, c.req.query("callbackURL"));
-  return c.html(signInPage(error, callbackURL));
+  return c.html(signInPage(error, callbackURL, c.get("cspNonce")));
 });
 
 app.get("/consent", async (c) => {
@@ -83,7 +96,18 @@ app.get("/consent", async (c) => {
   return c.html(
     consentPage(
       c.req.query("client_id") ?? "Unknown client",
-      c.req.query("scope") ?? ""
+      c.req.query("scope") ?? "",
+      c.get("cspNonce")
+    )
+  );
+});
+
+app.get("/error", (c) => {
+  return c.html(
+    errorPage(
+      c.req.query("error"),
+      c.req.query("error_description"),
+      c.get("cspNonce")
     )
   );
 });
@@ -116,7 +140,9 @@ app.get("/account", async (c) => {
   // in GitHub after the last sign-in, never re-fetched) still blocks org
   // profile creation, and accountPage now offers both Continue and Refresh
   // for that case so the user is never stranded without a re-link path.
-  return c.html(accountPage(session, callbackURL, githubOrgsFresh));
+  return c.html(
+    accountPage(session, callbackURL, githubOrgsFresh, c.get("cspNonce"))
+  );
 });
 
 app.on(authMethods, "/sign-in/social", handleAuth);
