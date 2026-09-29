@@ -62,8 +62,17 @@ export function page({
     <script>${THEME_SCRIPT}</script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="min-h-screen grid place-items-center bg-background bg-linear-to-b from-muted to-background text-foreground antialiased p-4">
-    <main class="w-full max-w-sm">${body}</main>
+  <body class="min-h-screen grid place-items-center bg-background bg-linear-to-b from-muted to-background text-foreground p-4">
+    <main class="w-full max-w-sm grid gap-6 justify-items-center">
+      <div class="flex items-center">
+        <img src="/logo-light.svg" alt="FOSSBilling" class="h-8 w-auto dark:hidden" />
+        <img src="/logo-dark.svg" alt="" aria-hidden="true" class="h-8 w-auto hidden dark:block" />
+        <span class="ml-3 pl-3 border-s text-sm font-semibold uppercase tracking-wider">Account</span>
+        <span class="ml-2 badge" data-variant="secondary">beta</span>
+      </div>
+      <div class="w-full">${body}</div>
+      <p class="text-sm text-muted-foreground">&copy; 2026 &mdash; The FOSSBilling project.</p>
+    </main>
     ${script ? `<script>(function () {${script}})();</script>` : ""}
   </body>
 </html>`;

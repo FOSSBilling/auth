@@ -65,6 +65,32 @@ test("page shell links the stylesheet, favicon and meta", () => {
   assert.ok(!html.includes("(function () {"), "omits page script when absent");
 });
 
+test("page shell renders the brand lockup and footer", () => {
+  const html = page({ title: "Sign In", body: "<p>hi</p>" });
+  assert.ok(
+    html.includes('<img src="/logo-light.svg" alt="FOSSBilling"'),
+    "renders the light wordmark with an accessible name"
+  );
+  assert.ok(
+    html.includes(
+      '<img src="/logo-dark.svg" alt="" aria-hidden="true"'
+    ),
+    "renders the dark wordmark, hidden from assistive tech"
+  );
+  assert.ok(
+    html.includes("dark:hidden") && html.includes("hidden dark:block"),
+    "swaps the wordmark with the theme"
+  );
+  assert.ok(
+    html.match(/border-s[^>]*>Account<\/span>/),
+    "labels the lockup with the system name"
+  );
+  assert.ok(
+    html.includes("The FOSSBilling project."),
+    "renders the footer line"
+  );
+});
+
 test("page escapes title and description", () => {
   const html = page({
     title: `A&B <"test">`,
@@ -262,7 +288,10 @@ test("accountPage renders the avatar with fallback initials", () => {
     ),
     "falls back to initials with no image"
   );
-  assert.ok(!noImage.includes("<img"));
+  assert.ok(
+    !noImage.match(/<img(?![^>]*logo-)/),
+    "renders no avatar image without a user image"
+  );
 });
 
 test("accountPage escapes user-controlled fields", () => {
