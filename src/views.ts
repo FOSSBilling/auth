@@ -52,9 +52,9 @@ export function page({
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)} | FOSSBilling Auth</title>
     <meta name="description" content="${escapeHtml(description ?? DEFAULT_DESCRIPTION)}" />
-    <!-- Hex approximations of the Vega --background token (oklch(100% 0 0)
-         light / oklch(14.5% 0 0) dark) from src/styles.css. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <!-- Hex approximations of the --background token (warm paper light /
+         near-black dark). Keep in sync with src/styles.css. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafaf9" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>${THEME_SCRIPT}</script>

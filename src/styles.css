@@ -1,2 +1,17 @@
 @import "tailwindcss";
 @import "basecoat-css";
+
+/* Family tokens shared with extensions (see
+   extensions/src/styles/global.css): warm paper background and tighter
+   radius. Every other token already matches Vega, except dark --accent. */
+:root {
+  --background: oklch(0.985 0.001 106.423);
+  --secondary: oklch(0.963 0.001 106.424);
+  --muted: oklch(0.963 0.001 106.424);
+  --accent: oklch(0.963 0.001 106.424);
+  --radius: 0.5rem;
+}
+
+.dark {
+  --accent: oklch(0.269 0 0);
+}
