@@ -91,19 +91,18 @@ export async function getGithubUserInfo(token: { accessToken?: string }) {
     // org-membership round trips with the profile fetch instead of
     // trailing behind it.
     const orgsPending = fetchActiveOrgLogins(token.accessToken);
-    const emailsPending = fetch("https://api.github.com/user/emails", {
-      headers
-    });
-
-    const profileResponse = await fetch("https://api.github.com/user", {
-      headers
-    });
+    // Awaiting the two responses together keeps either fetch's rejection
+    // inside the surrounding try — a later, conditional await would miss
+    // it on the early-return path below.
+    const [profileResponse, emailsResponse] = await Promise.all([
+      fetch("https://api.github.com/user", { headers }),
+      fetch("https://api.github.com/user/emails", { headers })
+    ]);
     if (!profileResponse.ok) return null;
     const profile = (await profileResponse.json()) as GithubProfile;
 
     let email = profile.email;
     let emailVerified = false;
-    const emailsResponse = await emailsPending;
     if (emailsResponse.ok) {
       const emails = (await emailsResponse.json()) as GithubEmail[];
       if (!email) {
