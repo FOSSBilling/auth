@@ -20,7 +20,7 @@ app.use("*", async (c, next) => {
   c.header("x-frame-options", "DENY");
   c.header(
     "content-security-policy",
-    "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
   );
   c.header(
     "permissions-policy",
