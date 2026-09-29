@@ -32,8 +32,10 @@ export function escapeHtml(value: unknown): string {
 // following the OS while no explicit choice is stored. An explicit stored
 // choice always wins. Listens for the same `basecoat:theme` event extensions
 // dispatches, so a future toggle here would stay in sync without further
-// changes.
-const THEME_SCRIPT = `try{var s=localStorage.getItem('themeMode');if(s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches){document.documentElement.classList.add('dark');}}catch(e){}try{var mq=matchMedia('(prefers-color-scheme: dark)');var sync=function(e){try{if(!localStorage.getItem('themeMode'))document.documentElement.classList.toggle('dark',e.matches);}catch(_){}};if(mq.addEventListener)mq.addEventListener('change',sync);}catch(e){}document.addEventListener('basecoat:theme',function(e){var m=e.detail&&e.detail.mode;var d=m==='dark'?true:m==='light'?false:!document.documentElement.classList.contains('dark');document.documentElement.classList.toggle('dark',d);try{localStorage.setItem('themeMode',d?'dark':'light');}catch(e){}});`;
+// changes. Every path also syncs the theme-color meta: a media-based pair
+// would follow the OS, not the stored choice.
+// The meta tag below must precede the script so it exists when this runs.
+const THEME_SCRIPT = `var tc=function(d){var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=d?'#0a0a0a':'#fafaf9';};try{var s=localStorage.getItem('themeMode');var d=s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d);tc(d);}catch(e){}try{var mq=matchMedia('(prefers-color-scheme: dark)');var sync=function(e){try{if(!localStorage.getItem('themeMode')){document.documentElement.classList.toggle('dark',e.matches);tc(e.matches);}}catch(_){}};if(mq.addEventListener)mq.addEventListener('change',sync);}catch(e){}document.addEventListener('basecoat:theme',function(e){var m=e.detail&&e.detail.mode;var d=m==='dark'?true:m==='light'?false:!document.documentElement.classList.contains('dark');document.documentElement.classList.toggle('dark',d);tc(d);try{localStorage.setItem('themeMode',d?'dark':'light');}catch(e){}});`;
 
 // Lucide ships no brand logos, so the GitHub mark stays hand-maintained.
 const GITHUB_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.05.77 2.12 0 1.53-.01 2.76-.01 3.14 0 .3.2.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>`;
@@ -54,10 +56,11 @@ export function page({
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)} | FOSSBilling Auth</title>
     <meta name="description" content="${escapeHtml(description ?? DEFAULT_DESCRIPTION)}" />
-    <!-- Hex approximations of the --background token (warm paper light /
+    <!-- Synced with the active theme by the init script below: a
+         media-based pair would follow the OS, not the stored choice.
+         Hex approximations of the --background token (warm paper light /
          near-black dark). Keep in sync with src/styles.css. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafaf9" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
+    <meta name="theme-color" content="#fafaf9" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>${THEME_SCRIPT}</script>
     <link rel="stylesheet" href="/styles.css" />
