@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "build:css": "tailwindcss -i ./src/styles.css -o ./public/styles.css --minify",
-    "predev": "npm run build:css",
-    "predeploy": "npm run build:css",
+    "build": "npm run build:css",
+    "predev": "npm run build",
+    "predeploy": "npm run build",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",

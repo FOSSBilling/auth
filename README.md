@@ -46,13 +46,19 @@ npm run dev
 ```
 
 `npm run dev` rebuilds the BasecoatUI stylesheet first (`predev` →
-`build:css`). The pages in `src/views.ts` link the compiled CSS at
+`build`). The pages in `src/views.ts` link the compiled CSS at
 `/styles.css`, which is built from `src/styles.css`
 (`@import "tailwindcss"; @import "basecoat-css";`) into `public/styles.css`
 and served as a Worker Static Asset (see `assets` in `wrangler.jsonc`). Run
-`npm run build:css` manually after editing `src/styles.css` if the dev
+`npm run build` manually after editing `src/styles.css` if the dev
 server isn't running. Always deploy with `npm run deploy` (not bare
 `wrangler deploy`) so the `predeploy` hook rebuilds the stylesheet.
+
+> **Note:** `public/styles.css` is gitignored, so the Cloudflare dashboard
+> build command must be `npm run build` — otherwise production serves no
+> stylesheet and the Worker's 404 (`text/plain`) trips the browser's MIME
+> check. `build` is the single entry point on purpose: add future build
+> steps there and the dashboard never needs updating.
 
 ## Production Setup
 
