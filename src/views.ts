@@ -227,15 +227,19 @@ export function accountPage(
   // Wrapped in its own grid so the helper text, buttons and error stack at
   // the same 8px rhythm as the card footer, while the section keeps 16px
   // between its blocks.
+  // Tooltip text is CSS-only and never announced, so each tooltip-bearing
+  // button mirrors it in sr-only text for screen readers. Buttons are
+  // natively focusable, which already exposes the tooltip to keyboard
+  // users via Basecoat's :focus-visible rule.
   const orgsBlock = !githubOrgsFresh
     ? `<div class="grid gap-2">
-         <button id="link-github-orgs" type="button" class="btn w-full" data-tooltip="${escapeHtml("Shares your GitHub organization memberships.")}" data-side="bottom">Grant GitHub Access</button>
+         <button id="link-github-orgs" type="button" class="btn w-full" data-tooltip="${escapeHtml("Shares your GitHub organization memberships.")}" data-side="bottom">Grant GitHub Access<span class="sr-only">: shares your GitHub organization memberships</span></button>
          <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>
        </div>`
     : callbackURL !== "/account"
       ? `<div class="grid gap-2">
            <a href="${escapeHtml(callbackURL)}" class="btn w-full">Continue</a>
-           <button id="link-github-orgs" type="button" class="btn w-full" data-variant="secondary" data-tooltip="${escapeHtml("Picks up access granted after sign-in.")}" data-side="bottom">Refresh GitHub Access</button>
+           <button id="link-github-orgs" type="button" class="btn w-full" data-variant="secondary" data-tooltip="${escapeHtml("Picks up access granted after sign-in.")}" data-side="bottom">Refresh GitHub Access<span class="sr-only">: picks up access granted after sign-in</span></button>
            <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>
          </div>`
       : "";

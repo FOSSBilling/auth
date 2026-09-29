@@ -203,7 +203,12 @@ test("consentPage escapes unknown scopes", () => {
 test("accountPage shows the grant flow when orgs are stale", () => {
   const html = accountPage(fakeSession(), "/account", false);
   assert.ok(html.includes('class="card"'));
-  assert.ok(html.includes("Grant GitHub Access"));
+  assert.ok(
+    html.includes(
+      'Grant GitHub Access<span class="sr-only">: shares your GitHub organization memberships</span>'
+    ),
+    "grant disclosure is announced, not only tooltiped"
+  );
   assert.ok(html.includes('id="link-github-orgs-error"'));
   assert.ok(html.includes('<div class="grid gap-2">'));
   assert.ok(
@@ -240,6 +245,12 @@ test("accountPage shows continue and refresh for a fresh linking caller", () => 
     "continue is the primary action"
   );
   assert.ok(html.includes("Refresh GitHub Access"));
+  assert.ok(
+    html.includes(
+      'Refresh GitHub Access<span class="sr-only">: picks up access granted after sign-in</span>'
+    ),
+    "refresh helper is announced, not only tooltiped"
+  );
   assert.ok(
     html.includes('data-variant="secondary" data-tooltip='),
     "refresh stays subordinate to continue"
