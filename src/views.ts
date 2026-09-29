@@ -123,14 +123,30 @@ export function signInPage(
 }
 
 export function consentPage(clientId: string, scope: string): string {
+  // Short chip labels per scope; the github grant's wider meaning survives
+  // as a tooltip since badge text truncates past ~20rem.
+  const scopeChip = (requestedScope: string): string => {
+    switch (requestedScope) {
+      case "openid":
+        return `<span class="badge" data-variant="secondary">OpenID</span>`;
+      case "github":
+        // The tooltip lives on a wrapper: .badge sets overflow:hidden,
+        // which would clip the tooltip's positioned ::before.
+        return `<span data-tooltip="${escapeHtml("Identity and organization memberships.")}" data-side="bottom"><span class="badge" data-variant="secondary">GitHub</span></span>`;
+      case "profile":
+        return `<span class="badge" data-variant="secondary">Profile</span>`;
+      case "email":
+        return `<span class="badge" data-variant="secondary">Email</span>`;
+      case "offline_access":
+        return `<span class="badge" data-variant="secondary">Offline Access</span>`;
+      default:
+        return `<span class="badge" data-variant="secondary">${escapeHtml(requestedScope)}</span>`;
+    }
+  };
   const requestedScopes = (scope.trim() || "openid profile email")
     .split(/\s+/)
-    .map((requestedScope) =>
-      requestedScope === "github"
-        ? "Linked GitHub identity and organization memberships"
-        : requestedScope
-    )
-    .join(", ");
+    .map(scopeChip)
+    .join("");
 
   return page({
     title: "Authorize Application",
@@ -138,11 +154,11 @@ export function consentPage(clientId: string, scope: string): string {
       <div class="card">
         <header>
           <h2>Authorize Application</h2>
-          <p>An application (<code>${escapeHtml(clientId)}</code>) is requesting access to your FOSSBilling account.</p>
+          <p>An application (<code class="bg-muted rounded px-1.5 py-0.5 text-sm font-mono">${escapeHtml(clientId)}</code>) is requesting access to your FOSSBilling account.</p>
         </header>
-        <section>
-          <p class="label text-sm font-medium">Requested scopes</p>
-          <p class="text-sm break-words">${escapeHtml(requestedScopes)}</p>
+        <section class="grid gap-2">
+          <p class="label text-sm font-medium">Requested Scopes</p>
+          <div class="flex flex-wrap gap-1.5">${requestedScopes}</div>
         </section>
         <footer class="flex-col gap-2">
           <button id="accept-consent" type="button" class="btn w-full">Authorize</button>
@@ -183,10 +199,10 @@ export function accountPage(
   // because its h2/p typography selectors only match those. Spacing uses
   // margin (not gap), columns apply uncontested (no card-action here), and
   // the name needs text-xl! — the header's own rules outrank utilities.
-  const identityClass = session.user.image ? "grid-cols-[auto_1fr]" : "";
-  const image = session.user.image
-    ? `<span class="avatar me-3 self-center" data-size="lg"><img src="${escapeHtml(session.user.image)}" alt="" /><span>${escapeHtml(fallbackInitials)}</span></span>`
+  const avatarImage = session.user.image
+    ? `<img src="${escapeHtml(session.user.image)}" alt="" />`
     : "";
+  const avatar = `<span class="avatar me-3 self-center" data-size="lg">${avatarImage}<span>${escapeHtml(fallbackInitials)}</span></span>`;
 
   // Freshness alone must not hide the reconnect flow: a fresh-but-empty
   // snapshot (granted after the last sign-in, or an org the OAuth App
@@ -199,8 +215,7 @@ export function accountPage(
   // between its blocks.
   const orgsBlock = !githubOrgsFresh
     ? `<div class="grid gap-2">
-         <p class="text-sm text-muted-foreground">Grant access to your GitHub organizations so extension developer profile claims can be verified automatically.</p>
-         <button id="link-github-orgs" type="button" class="btn w-full">Grant GitHub Access</button>
+         <button id="link-github-orgs" type="button" class="btn w-full" data-tooltip="${escapeHtml("Shares your GitHub organization memberships.")}" data-side="bottom">Grant GitHub Access</button>
          <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>
        </div>`
     : callbackURL !== "/account"
@@ -215,8 +230,8 @@ export function accountPage(
     title: "Account",
     body: `
       <div class="card">
-        <header class="${identityClass}">
-          ${image}
+        <header class="grid-cols-[auto_1fr]">
+          ${avatar}
           <h2 class="self-center text-xl!">${escapeHtml(session.user.name || session.user.email)}</h2>
         </header>
         <section class="grid gap-4">

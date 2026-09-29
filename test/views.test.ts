@@ -116,19 +116,38 @@ test("signInPage threads callbackURL through the script safely", () => {
   assert.ok(!injected.includes("alert(1)</script>"));
 });
 
-test("consentPage escapes the client id and maps the github scope", () => {
+test("consentPage escapes the client id and maps scopes to chips", () => {
   const html = consentPage("<evil>", "openid profile email github");
   assert.ok(html.includes("&lt;evil&gt;"));
   assert.ok(
-    html.includes("Linked GitHub identity and organization memberships")
+    html.includes('<span class="badge" data-variant="secondary">OpenID</span>')
   );
+  assert.ok(
+    html.includes('<span class="badge" data-variant="secondary">Profile</span>')
+  );
+  assert.ok(html.includes(">GitHub</span>"));
+  assert.ok(
+    html.includes('data-tooltip="Identity and organization memberships."')
+  );
+  assert.ok(
+    !html.includes('class="badge" data-variant="secondary" data-tooltip'),
+    "tooltip sits on a wrapper: badge overflow would clip it"
+  );
+  assert.ok(!html.includes("openid, profile, email"));
   assert.ok(html.includes('id="accept-consent"'));
   assert.ok(html.includes('id="deny-consent"'));
   assert.ok(html.includes('data-variant="outline"'));
 });
 
 test("consentPage falls back to default scopes", () => {
-  assert.ok(consentPage("c1", "").includes("openid, profile, email"));
+  const html = consentPage("c1", "");
+  assert.ok(html.includes(">OpenID</span>"));
+  assert.ok(html.includes(">Email</span>"));
+});
+
+test("consentPage escapes unknown scopes", () => {
+  const html = consentPage("c1", "openid <evil>");
+  assert.ok(html.includes("&lt;evil&gt;"));
 });
 
 test("accountPage shows the grant flow when orgs are stale", () => {
@@ -137,6 +156,16 @@ test("accountPage shows the grant flow when orgs are stale", () => {
   assert.ok(html.includes("Grant GitHub Access"));
   assert.ok(html.includes('id="link-github-orgs-error"'));
   assert.ok(html.includes('<div class="grid gap-2">'));
+  assert.ok(
+    html.includes(
+      'data-tooltip="Shares your GitHub organization memberships."'
+    ),
+    "the grant justification lives on the button"
+  );
+  assert.ok(
+    !html.includes("verified automatically"),
+    "no standalone helper paragraph"
+  );
 });
 
 test("accountPage keeps an even label rhythm without margin hacks", () => {
@@ -218,12 +247,18 @@ test("accountPage renders the avatar with fallback initials", () => {
   );
   assert.ok(emailFallback.includes("ada@example.com"));
 
-  const noImage = accountPage(fakeSession(), "/account", true);
-  assert.ok(!noImage.includes('class="avatar"'));
-  assert.ok(
-    !noImage.includes("grid-cols-"),
-    "stacks the heading normally with no avatar"
+  const noImage = accountPage(
+    fakeSession({ name: "Ada Lovelace", image: null }),
+    "/account",
+    true
   );
+  assert.ok(
+    noImage.includes(
+      '<span class="avatar me-3 self-center" data-size="lg"><span>AD</span></span>'
+    ),
+    "falls back to initials with no image"
+  );
+  assert.ok(!noImage.includes("<img"));
 });
 
 test("accountPage escapes user-controlled fields", () => {
