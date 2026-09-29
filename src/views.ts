@@ -141,7 +141,7 @@ export function consentPage(clientId: string, scope: string): string {
           <p>An application (<code>${escapeHtml(clientId)}</code>) is requesting access to your FOSSBilling account.</p>
         </header>
         <section>
-          <p class="text-sm text-muted-foreground">Requested scopes</p>
+          <p class="label text-sm font-medium">Requested scopes</p>
           <p class="text-sm break-words">${escapeHtml(requestedScopes)}</p>
         </section>
         <footer class="flex-col gap-2">
@@ -179,8 +179,13 @@ export function accountPage(
     .trim()
     .slice(0, 2)
     .toUpperCase();
+  // Side-by-side identity row. Everything stays a direct header child
+  // because its h2/p typography selectors only match those. Spacing uses
+  // margin (not gap), columns apply uncontested (no card-action here), and
+  // the name needs text-xl! — the header's own rules outrank utilities.
+  const identityClass = session.user.image ? "grid-cols-[auto_1fr]" : "";
   const image = session.user.image
-    ? `<span class="avatar" data-size="lg"><img src="${escapeHtml(session.user.image)}" alt="" /><span>${escapeHtml(fallbackInitials)}</span></span>`
+    ? `<span class="avatar me-3 self-center" data-size="lg"><img src="${escapeHtml(session.user.image)}" alt="" /><span>${escapeHtml(fallbackInitials)}</span></span>`
     : "";
 
   // Freshness alone must not hide the reconnect flow: a fresh-but-empty
@@ -189,31 +194,36 @@ export function accountPage(
   // GITHUB_MISMATCH, and plain re-login never re-fetches. When a linking
   // caller is present, always offer an explicit refresh alongside the
   // continue path so a specific missing org can be granted on GitHub.
+  // Wrapped in its own grid so the helper text, buttons and error stack at
+  // the same 8px rhythm as the card footer, while the section keeps 16px
+  // between its blocks.
   const orgsBlock = !githubOrgsFresh
-    ? `<p class="text-sm text-muted-foreground">Grant access to your GitHub organizations so extension developer profile claims can be verified automatically.</p>
-       <button id="link-github-orgs" type="button" class="btn w-full">Grant GitHub Org Access</button>
-       <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>`
+    ? `<div class="grid gap-2">
+         <p class="text-sm text-muted-foreground">Grant access to your GitHub organizations so extension developer profile claims can be verified automatically.</p>
+         <button id="link-github-orgs" type="button" class="btn w-full">Grant GitHub Access</button>
+         <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>
+       </div>`
     : callbackURL !== "/account"
-      ? `<p class="text-sm text-muted-foreground">GitHub organization access looks up to date, but a specific organization can still be missing if it was granted in GitHub after your last sign-in. Use refresh to grant it on GitHub, or continue back.</p>
-         <a href="${escapeHtml(callbackURL)}" class="btn w-full" data-variant="secondary">Continue</a>
-         <button id="link-github-orgs" type="button" class="btn w-full" data-variant="outline">Refresh GitHub Org Access</button>
-         <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>`
+      ? `<div class="grid gap-2">
+           <a href="${escapeHtml(callbackURL)}" class="btn w-full">Continue</a>
+           <button id="link-github-orgs" type="button" class="btn w-full" data-variant="secondary" data-tooltip="${escapeHtml("Picks up access granted after sign-in.")}" data-side="bottom">Refresh GitHub Access</button>
+           <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>
+         </div>`
       : "";
 
   return page({
     title: "Account",
     body: `
       <div class="card">
-        <header>
+        <header class="${identityClass}">
           ${image}
-          <h2>${escapeHtml(session.user.name || session.user.email)}</h2>
-          <p>This is your central FOSSBilling account.</p>
+          <h2 class="self-center text-xl!">${escapeHtml(session.user.name || session.user.email)}</h2>
         </header>
         <section class="grid gap-4">
-          <div class="grid gap-1">
-            <p class="text-sm text-muted-foreground">User ID</p>
+          <div class="grid gap-2">
+            <p class="label text-sm font-medium">User ID</p>
             <p class="text-sm break-all">${escapeHtml(session.user.id)}</p>
-            <p class="text-sm text-muted-foreground mt-2">Email</p>
+            <p class="label text-sm font-medium">Email</p>
             <p class="text-sm break-all">${escapeHtml(session.user.email)}</p>
           </div>
           ${orgsBlock}
@@ -254,7 +264,13 @@ export function accountPage(
         button.disabled = false;
       });
       document.getElementById('sign-out')?.addEventListener('click', async () => {
-        await fetch('/sign-out', { method: 'POST' });
+        // better-auth rejects content-type-less POSTs with 415, which would
+        // leave the session intact and bounce /sign-in straight back here.
+        await fetch('/sign-out', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: "{}"
+        });
         window.location.href = '/sign-in';
       });
     `

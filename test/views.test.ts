@@ -134,8 +134,18 @@ test("consentPage falls back to default scopes", () => {
 test("accountPage shows the grant flow when orgs are stale", () => {
   const html = accountPage(fakeSession(), "/account", false);
   assert.ok(html.includes('class="card"'));
-  assert.ok(html.includes("Grant GitHub Org Access"));
+  assert.ok(html.includes("Grant GitHub Access"));
   assert.ok(html.includes('id="link-github-orgs-error"'));
+  assert.ok(html.includes('<div class="grid gap-2">'));
+});
+
+test("accountPage keeps an even label rhythm without margin hacks", () => {
+  const html = accountPage(fakeSession(), "/account", true);
+  assert.ok(!html.includes("mt-2"), "spacing comes from grid gaps alone");
+  assert.ok(
+    html.includes('<p class="label text-sm font-medium">User ID</p>'),
+    "labels use the label component, not muted text"
+  );
 });
 
 test("accountPage shows continue and refresh for a fresh linking caller", () => {
@@ -144,14 +154,43 @@ test("accountPage shows continue and refresh for a fresh linking caller", () => 
     "https://extensions.fossbilling.org/reconnect",
     true
   );
-  assert.ok(html.includes(">Continue</a>"));
-  assert.ok(html.includes("Refresh GitHub Org Access"));
+  assert.ok(
+    html.includes(
+      '<a href="https://extensions.fossbilling.org/reconnect" class="btn w-full">Continue</a>'
+    ),
+    "continue is the primary action"
+  );
+  assert.ok(html.includes("Refresh GitHub Access"));
+  assert.ok(
+    html.includes('data-variant="secondary" data-tooltip='),
+    "refresh stays subordinate to continue"
+  );
+  assert.ok(
+    html.includes('data-tooltip="Picks up access granted after sign-in."'),
+    "the staleness note lives on the refresh button"
+  );
+  assert.ok(!html.includes("looks current"), "no standalone helper paragraph");
 });
 
 test("accountPage shows neither button when fresh with no caller", () => {
   const html = accountPage(fakeSession(), "/account", true);
   assert.ok(!html.includes('id="link-github-orgs" type="button"'));
   assert.ok(html.includes('id="sign-out"'));
+  assert.ok(
+    html.includes(
+      'id="sign-out" type="button" class="btn w-full" data-variant="outline"'
+    ),
+    "sign out keeps a button affordance without going primary"
+  );
+});
+
+test("accountPage signs out with a JSON body", () => {
+  // better-auth answers content-type-less POSTs with 415, leaving the
+  // session alive so /sign-in bounces straight back to /account.
+  const html = accountPage(fakeSession(), "/account", true);
+  assert.ok(html.includes("fetch('/sign-out', {"));
+  assert.ok(html.includes("'content-type': 'application/json'"));
+  assert.ok(html.includes('body: "{}"'));
 });
 
 test("accountPage renders the avatar with fallback initials", () => {
@@ -160,7 +199,15 @@ test("accountPage renders the avatar with fallback initials", () => {
     "/account",
     true
   );
-  assert.ok(withImage.includes('class="avatar"'));
+  assert.ok(withImage.includes('class="avatar me-3 self-center"'));
+  assert.ok(
+    withImage.includes('<header class="grid-cols-[auto_1fr]">'),
+    "lays the avatar beside the name"
+  );
+  assert.ok(
+    withImage.includes('<h2 class="self-center text-xl!">'),
+    "centers and enlarges the name"
+  );
   assert.ok(withImage.includes('src="https://example.com/a.png"'));
   assert.ok(withImage.includes("<span>AD</span>"));
 
@@ -173,6 +220,10 @@ test("accountPage renders the avatar with fallback initials", () => {
 
   const noImage = accountPage(fakeSession(), "/account", true);
   assert.ok(!noImage.includes('class="avatar"'));
+  assert.ok(
+    !noImage.includes("grid-cols-"),
+    "stacks the heading normally with no avatar"
+  );
 });
 
 test("accountPage escapes user-controlled fields", () => {
