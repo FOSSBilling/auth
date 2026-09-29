@@ -55,6 +55,11 @@ test("page shell links the stylesheet, favicon and meta", () => {
   );
   assert.ok(html.includes('name="description"'));
   assert.ok(html.includes('name="theme-color"'));
+  assert.equal(
+    html.match(/<meta name="theme-color"/g)?.length,
+    1,
+    "uses one theme-color tag synced by the init script, not an OS media pair"
+  );
   assert.ok(html.includes("themeMode"), "includes the theme init script");
   assert.ok(
     html.includes("prefers-color-scheme: dark"),
