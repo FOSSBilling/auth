@@ -54,12 +54,6 @@ and served as a Worker Static Asset (see `assets` in `wrangler.jsonc`). Run
 server isn't running. Always deploy with `npm run deploy` (not bare
 `wrangler deploy`) so the `predeploy` hook rebuilds the stylesheet.
 
-> **Note:** `public/styles.css` is gitignored, so the Cloudflare dashboard
-> build command must be `npm run build` — otherwise production serves no
-> stylesheet and the Worker's 404 (`text/plain`) trips the browser's MIME
-> check. `build` is the single entry point on purpose: add future build
-> steps there and the dashboard never needs updating.
-
 ## Production Setup
 
 > **Note:** `wrangler.jsonc` intentionally has no `routes` entry. A `routes` block with
