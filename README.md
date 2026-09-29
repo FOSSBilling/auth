@@ -46,11 +46,11 @@ npm run dev
 ```
 
 `npm run dev` rebuilds the BasecoatUI stylesheet first (`predev` →
-`build:css`). The pages in `src/views.ts` link the compiled CSS at
+`build`). The pages in `src/views.ts` link the compiled CSS at
 `/styles.css`, which is built from `src/styles.css`
 (`@import "tailwindcss"; @import "basecoat-css";`) into `public/styles.css`
 and served as a Worker Static Asset (see `assets` in `wrangler.jsonc`). Run
-`npm run build:css` manually after editing `src/styles.css` if the dev
+`npm run build` manually after editing `src/styles.css` if the dev
 server isn't running. Always deploy with `npm run deploy` (not bare
 `wrangler deploy`) so the `predeploy` hook rebuilds the stylesheet.
 
