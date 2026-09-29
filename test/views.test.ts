@@ -62,6 +62,10 @@ test("page shell links the stylesheet, favicon and meta", () => {
   );
   assert.ok(html.includes("max-w-sm"), "constrains the card width");
   assert.ok(html.includes("bg-linear-to-b"), "renders the backdrop gradient");
+  assert.ok(
+    html.includes("from-background to-muted"),
+    "anchors the lockup on the background tone so the badge reads"
+  );
   assert.ok(!html.includes("(function () {"), "omits page script when absent");
 });
 
@@ -84,6 +88,10 @@ test("page shell renders the brand lockup and footer", () => {
   assert.ok(
     html.match(/border-s[^>]*>Account<\/span>/),
     "labels the lockup with the system name"
+  );
+  assert.ok(
+    html.includes('<span class="ml-2 badge" data-variant="secondary">beta</span>'),
+    "marks the system as beta like extensions"
   );
   assert.ok(
     html.includes("The FOSSBilling project."),

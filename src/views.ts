@@ -62,7 +62,7 @@ export function page({
     <script>${THEME_SCRIPT}</script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="min-h-screen grid place-items-center bg-background bg-linear-to-b from-muted to-background text-foreground p-4">
+  <body class="min-h-screen grid place-items-center bg-background bg-linear-to-b from-background to-muted text-foreground p-4">
     <main class="w-full max-w-sm grid gap-6 justify-items-center">
       <div class="flex items-center">
         <img src="/logo-light.svg" alt="FOSSBilling" class="h-8 w-auto dark:hidden" />
