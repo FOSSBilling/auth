@@ -87,9 +87,13 @@ export async function getGithubUserInfo(token: { accessToken?: string }) {
   if (!token.accessToken) return null;
   try {
     const headers = GITHUB_API_HEADERS(token.accessToken);
-    // Only needs the token, so overlap it with the profile/emails round
-    // trips instead of trailing them.
+    // All three calls only need the token, so overlap the emails and
+    // org-membership round trips with the profile fetch instead of
+    // trailing behind it.
     const orgsPending = fetchActiveOrgLogins(token.accessToken);
+    const emailsPending = fetch("https://api.github.com/user/emails", {
+      headers
+    });
 
     const profileResponse = await fetch("https://api.github.com/user", {
       headers
@@ -99,9 +103,7 @@ export async function getGithubUserInfo(token: { accessToken?: string }) {
 
     let email = profile.email;
     let emailVerified = false;
-    const emailsResponse = await fetch("https://api.github.com/user/emails", {
-      headers
-    });
+    const emailsResponse = await emailsPending;
     if (emailsResponse.ok) {
       const emails = (await emailsResponse.json()) as GithubEmail[];
       if (!email) {
