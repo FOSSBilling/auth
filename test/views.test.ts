@@ -167,9 +167,17 @@ test("consentPage escapes the client id and maps scopes to chips", () => {
   assert.ok(
     html.includes('<span class="badge" data-variant="secondary">Profile</span>')
   );
-  assert.ok(html.includes(">GitHub</span>"));
+  assert.ok(html.includes(">GitHub<span"));
   assert.ok(
     html.includes('data-tooltip="Identity and organization memberships."')
+  );
+  assert.ok(
+    html.includes('tabindex="0"'),
+    "tooltip wrapper is keyboard-focusable"
+  );
+  assert.ok(
+    html.includes('<span class="sr-only">: identity and organization memberships</span>'),
+    "grant is announced to screen readers, not only via tooltip"
   );
   assert.ok(
     !html.includes('class="badge" data-variant="secondary" data-tooltip'),

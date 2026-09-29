@@ -142,8 +142,11 @@ export function consentPage(clientId: string, scope: string): string {
         return `<span class="badge" data-variant="secondary">OpenID</span>`;
       case "github":
         // The tooltip lives on a wrapper: .badge sets overflow:hidden,
-        // which would clip the tooltip's positioned ::before.
-        return `<span data-tooltip="${escapeHtml("Identity and organization memberships.")}" data-side="bottom"><span class="badge" data-variant="secondary">GitHub</span></span>`;
+        // which would clip the tooltip's positioned ::before. The wrapper
+        // is focusable so keyboard users get the tooltip via Basecoat's
+        // :focus-visible rule, and the sr-only text announces the grant
+        // to screen readers regardless of tooltip support.
+        return `<span data-tooltip="${escapeHtml("Identity and organization memberships.")}" data-side="bottom" tabindex="0"><span class="badge" data-variant="secondary">GitHub<span class="sr-only">: identity and organization memberships</span></span></span>`;
       case "profile":
         return `<span class="badge" data-variant="secondary">Profile</span>`;
       case "email":
