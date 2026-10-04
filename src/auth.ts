@@ -137,6 +137,7 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     // flow in views.ts. githubLogin/githubOrgs are handled separately by the
     // databaseHooks below — see the additionalFields comment above for why.
     account: {
+      encryptOAuthTokens: true,
       accountLinking: {
         // Email addresses can be reassigned; only an authenticated user may
         // authorize linking a new GitHub identity to an existing account.

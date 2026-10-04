@@ -124,6 +124,35 @@ The production GitHub OAuth callback URL should be:
 https://auth.fossbilling.net/callback/github
 ```
 
+## GitHub credential storage and secret rotation
+
+GitHub access and refresh tokens are encrypted by Better Auth using
+`BETTER_AUTH_SECRET` before being stored in D1. Keep that secret separate from
+database exports. GitHub does not issue OIDC ID tokens in this flow; Better Auth's
+option does not encrypt the `idToken` column.
+
+For the first encrypted deployment, pause sign-in/link callbacks and other
+account writes during the rollout. Revoke existing GitHub OAuth grants (users can
+revoke this application under GitHub Settings → Applications) and handle any
+retained exports containing old tokens as sensitive credentials. Migration
+`0010_clear_unencrypted_github_tokens.sql` clears GitHub token and expiry columns,
+including dormant accounts, while preserving users, sessions and stable GitHub
+account bindings. Apply it before deploying the encryption-enabled Worker, then
+resume traffic. Clearing D1 values alone does not revoke tokens held in old
+exports. Users must sign in again or use “Refresh GitHub access” on the account
+page to obtain fresh credentials; they retain the same local user ID.
+
+This service uses a single encryption secret. To rotate `BETTER_AUTH_SECRET`,
+pause account writes, revoke the old GitHub grants, and run the same UPDATE from
+migration 0010 against the active D1 database before replacing the secret and
+resuming traffic. The migration runner will not rerun an already-applied
+migration. Do not leave old ciphertext in place: the new secret cannot decrypt
+it. Expect users to sign in again, since secret rotation also invalidates
+secret-protected cookies. Do not rotate the secret back to recover credentials;
+fresh sign-in/re-link writes encrypted tokens under the new secret. The regression
+tests cover clearing old credentials and recovering the same identity under a
+replacement secret.
+
 ## OAuth Provider Shape
 
 Canonical issuer:

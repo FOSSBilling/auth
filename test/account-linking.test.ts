@@ -12,7 +12,7 @@ import type { BetterAuthOptions } from "better-auth";
 // with real in-memory persistence rather than duplicating its linking logic.
 const source = readFileSync(new URL("../src/auth.ts", import.meta.url), "utf8");
 const accountMatch = source.match(
-  /account:\s*\{\s*accountLinking:\s*(\{[^}]*\})\s*\}/
+  /account:\s*\{\s*(?:encryptOAuthTokens:\s*true,\s*)?accountLinking:\s*(\{[^}]*\})\s*\}/
 );
 assert.ok(
   accountMatch,
