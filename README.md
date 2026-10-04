@@ -149,9 +149,7 @@ resuming traffic. The migration runner will not rerun an already-applied
 migration. Do not leave old ciphertext in place: the new secret cannot decrypt
 it. Expect users to sign in again, since secret rotation also invalidates
 secret-protected cookies. Do not rotate the secret back to recover credentials;
-fresh sign-in/re-link writes encrypted tokens under the new secret. The regression
-tests cover clearing old credentials and recovering the same identity under a
-replacement secret.
+fresh sign-in/re-link writes encrypted tokens under the new secret.
 
 ## OAuth Provider Shape
 
