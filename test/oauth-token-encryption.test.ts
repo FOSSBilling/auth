@@ -15,13 +15,31 @@ import type { BetterAuthOptions } from "better-auth";
 // Exercise the production literal policy with the installed OAuth implementation.
 // Importing auth.ts directly needs the Worker's extensionless module resolver.
 const source = readFileSync(new URL("../src/auth.ts", import.meta.url), "utf8");
-const match = source.match(
-  /account:\s*(\{\s*(?:encryptOAuthTokens:\s*true,\s*)?accountLinking:\s*\{[^}]*\}\s*\})/
-);
-assert.ok(match, "production account policy is a literal object");
+function extractAccountLiteral(text: string): string {
+  const linking = text.indexOf("accountLinking:");
+  assert.ok(linking !== -1, "production account linking policy exists");
+  const key = text.lastIndexOf("account:", linking);
+  assert.ok(key !== -1, "production account policy exists");
+  const start = text.indexOf("{", key);
+  assert.ok(start !== -1, "production account policy is a literal object");
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  throw new Error("production account policy is a literal object");
+}
 const account = runInNewContext(
-  `(${match[1]})`
+  `(${extractAccountLiteral(source)})`
 ) as BetterAuthOptions["account"];
+assert.equal(
+  (account as { encryptOAuthTokens?: boolean })?.encryptOAuthTokens,
+  true,
+  "production account policy encrypts OAuth tokens"
+);
 const migration = readFileSync(
   new URL(
     "../migrations/0010_clear_unencrypted_github_tokens.sql",

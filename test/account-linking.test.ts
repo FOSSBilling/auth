@@ -11,16 +11,28 @@ import type { BetterAuthOptions } from "better-auth";
 // its literal account policy, then exercise the installed OAuth implementation
 // with real in-memory persistence rather than duplicating its linking logic.
 const source = readFileSync(new URL("../src/auth.ts", import.meta.url), "utf8");
-const accountMatch = source.match(
-  /account:\s*\{\s*(?:encryptOAuthTokens:\s*true,\s*)?accountLinking:\s*(\{[^}]*\})\s*\}/
-);
-assert.ok(
-  accountMatch,
-  "production account linking policy is a literal object"
-);
-const accountLinking = runInNewContext(`(${accountMatch[1]})`) as NonNullable<
-  NonNullable<BetterAuthOptions["account"]>["accountLinking"]
->;
+function extractAccountLiteral(text: string): string {
+  const linking = text.indexOf("accountLinking:");
+  assert.ok(linking !== -1, "production account linking policy exists");
+  const key = text.lastIndexOf("account:", linking);
+  assert.ok(key !== -1, "production account policy exists");
+  const start = text.indexOf("{", key);
+  assert.ok(start !== -1, "production account policy is a literal object");
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  throw new Error("production account policy is a literal object");
+}
+const account = runInNewContext(
+  `(${extractAccountLiteral(source)})`
+) as NonNullable<BetterAuthOptions["account"]>;
+const accountLinking = account.accountLinking;
+assert.ok(accountLinking, "production account linking policy is a literal object");
 
 async function fixture() {
   const db: Record<string, Record<string, unknown>[]> = {

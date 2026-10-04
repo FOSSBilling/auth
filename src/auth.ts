@@ -137,6 +137,7 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     // flow in views.ts. githubLogin/githubOrgs are handled separately by the
     // databaseHooks below — see the additionalFields comment above for why.
     account: {
+      encryptOAuthTokens: true,
       // Keep unauthenticated OAuth starts from writing verification rows to D1.
       // Better Auth encrypts the state cookie and validates it on callback.
       storeStateStrategy: "cookie",
