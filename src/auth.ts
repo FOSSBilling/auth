@@ -130,6 +130,10 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     // databaseHooks below — see the additionalFields comment above for why.
     account: {
       accountLinking: {
+        // Email addresses can be reassigned; only an authenticated user may
+        // authorize linking a new GitHub identity to an existing account.
+        disableImplicitLinking: true,
+        requireLocalEmailVerified: true,
         updateUserInfoOnLink: true
       }
     },
