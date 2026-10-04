@@ -31,6 +31,16 @@ app.use("*", async (c, next) => {
   const cspNonce = newNonce();
   c.set("cspNonce", cspNonce);
   await next();
+  // Account and OAuth pages contain session or interaction state. Apply the
+  // policy to HTML responses so static assets and public JSON keep theirs.
+  if (
+    c.res.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ===
+    "text/html"
+  ) {
+    c.header("cache-control", "no-store, max-age=0");
+    c.header("pragma", "no-cache");
+    c.header("expires", "0");
+  }
   c.header("referrer-policy", "no-referrer");
   c.header("x-content-type-options", "nosniff");
   c.header("x-frame-options", "DENY");

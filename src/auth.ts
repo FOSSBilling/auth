@@ -78,7 +78,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     await db
       .update(schema.user)
       .set({
+        githubId: account.accountId,
         githubLogin: profile.login,
+        githubLoginVerifiedAt: profile.loginVerifiedAt,
         ...(profile.orgs !== null
           ? {
               githubOrgs: JSON.stringify(profile.orgs),
@@ -116,6 +118,12 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         // them populated from getUserInfo/OAuth profile data, since Better
         // Auth runs both through the same input-filtered parser. They're
         // actually written by the databaseHooks below instead.
+        githubId: { type: "string", required: false, input: false },
+        githubLoginVerifiedAt: {
+          type: "string",
+          required: false,
+          input: false
+        },
         githubLogin: { type: "string", required: false, input: false },
         githubOrgs: { type: "string", required: false, input: false },
         githubOrgsVerifiedAt: {
@@ -129,7 +137,15 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     // flow in views.ts. githubLogin/githubOrgs are handled separately by the
     // databaseHooks below — see the additionalFields comment above for why.
     account: {
+      encryptOAuthTokens: true,
+      // Keep unauthenticated OAuth starts from writing verification rows to D1.
+      // Better Auth encrypts the state cookie and validates it on callback.
+      storeStateStrategy: "cookie",
       accountLinking: {
+        // Email addresses can be reassigned; only an authenticated user may
+        // authorize linking a new GitHub identity to an existing account.
+        disableImplicitLinking: true,
+        requireLocalEmailVerified: true,
         updateUserInfoOnLink: true
       }
     },
@@ -196,7 +212,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
             "email_verified",
             "picture",
             "https://fossbilling.org/claims/user_id",
+            "https://fossbilling.org/claims/github_id",
             "https://fossbilling.org/claims/github_login",
+            "https://fossbilling.org/claims/github_login_expires_at",
             "https://fossbilling.org/claims/github_orgs",
             "https://fossbilling.org/claims/github_orgs_expires_at"
           ]

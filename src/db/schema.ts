@@ -26,6 +26,10 @@ export const user = sqliteTable("user", {
   // scope was added. githubOrgsVerifiedAt is updated only after a successful
   // membership fetch; a failed fetch preserves both the list and timestamp
   // as last-known-good data.
+  // Provider ID is immutable. Login evidence expires independently of orgs;
+  // legacy rows stay unverified until a successful GitHub authentication.
+  githubId: text("githubId"),
+  githubLoginVerifiedAt: text("githubLoginVerifiedAt"),
   githubLogin: text("githubLogin"),
   githubOrgs: text("githubOrgs"),
   githubOrgsVerifiedAt: text("githubOrgsVerifiedAt")
