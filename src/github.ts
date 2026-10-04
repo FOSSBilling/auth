@@ -15,14 +15,16 @@ import type { GithubProfile } from "better-auth/social-providers";
 // fetched values keyed by GitHub's numeric id (== the account row's
 // accountId in every sign-in/link path) and auth.ts's databaseHooks reads
 // them back once the account row lands, bypassing that filter entirely.
-const pendingGithubProfiles = new Map<
-  string,
-  { login: string; orgs: string[] | null }
->();
+type GithubProfileEvidence = {
+  login: string;
+  loginVerifiedAt: string;
+  orgs: string[] | null;
+};
+const pendingGithubProfiles = new Map<string, GithubProfileEvidence>();
 
 export function consumeGithubProfile(
   accountId: string
-): { login: string; orgs: string[] | null } | undefined {
+): GithubProfileEvidence | undefined {
   const profile = pendingGithubProfiles.get(accountId);
   pendingGithubProfiles.delete(accountId);
   return profile;
@@ -100,6 +102,7 @@ export async function getGithubUserInfo(token: { accessToken?: string }) {
     ]);
     if (!profileResponse.ok) return null;
     const profile = (await profileResponse.json()) as GithubProfile;
+    const loginVerifiedAt = new Date().toISOString();
 
     let email = profile.email;
     let emailVerified = false;
@@ -125,6 +128,7 @@ export async function getGithubUserInfo(token: { accessToken?: string }) {
     const githubOrgs = await orgsPending;
     pendingGithubProfiles.set(String(profile.id), {
       login: profile.login,
+      loginVerifiedAt,
       orgs: githubOrgs
     });
 

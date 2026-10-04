@@ -78,7 +78,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     await db
       .update(schema.user)
       .set({
+        githubId: account.accountId,
         githubLogin: profile.login,
+        githubLoginVerifiedAt: profile.loginVerifiedAt,
         ...(profile.orgs !== null
           ? {
               githubOrgs: JSON.stringify(profile.orgs),
@@ -116,6 +118,12 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         // them populated from getUserInfo/OAuth profile data, since Better
         // Auth runs both through the same input-filtered parser. They're
         // actually written by the databaseHooks below instead.
+        githubId: { type: "string", required: false, input: false },
+        githubLoginVerifiedAt: {
+          type: "string",
+          required: false,
+          input: false
+        },
         githubLogin: { type: "string", required: false, input: false },
         githubOrgs: { type: "string", required: false, input: false },
         githubOrgsVerifiedAt: {
@@ -200,7 +208,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
             "email_verified",
             "picture",
             "https://fossbilling.org/claims/user_id",
+            "https://fossbilling.org/claims/github_id",
             "https://fossbilling.org/claims/github_login",
+            "https://fossbilling.org/claims/github_login_expires_at",
             "https://fossbilling.org/claims/github_orgs",
             "https://fossbilling.org/claims/github_orgs_expires_at"
           ]

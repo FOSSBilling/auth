@@ -1,3 +1,6 @@
+const GITHUB_ID_CLAIM = "https://fossbilling.org/claims/github_id";
+const GITHUB_LOGIN_EXPIRES_AT_CLAIM =
+  "https://fossbilling.org/claims/github_login_expires_at";
 const GITHUB_LOGIN_CLAIM = "https://fossbilling.org/claims/github_login";
 const GITHUB_ORGS_CLAIM = "https://fossbilling.org/claims/github_orgs";
 const GITHUB_ORGS_EXPIRES_AT_CLAIM =
@@ -16,6 +19,25 @@ export function getGithubOrgsMaxAgeMs(raw?: string): number {
   return seconds * 1000;
 }
 
+function evidenceExpiry(
+  verifiedAt: unknown,
+  maxAgeMs: number,
+  now: number
+): string | null {
+  if (
+    typeof verifiedAt !== "string" ||
+    !Number.isFinite(maxAgeMs) ||
+    maxAgeMs <= 0
+  )
+    return null;
+  const verifiedAtMs = Date.parse(verifiedAt);
+  if (!Number.isFinite(verifiedAtMs) || verifiedAtMs > now) return null;
+  const expiresAtMs = verifiedAtMs + maxAgeMs;
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now) return null;
+  const expiresAt = new Date(expiresAtMs);
+  return Number.isFinite(expiresAt.getTime()) ? expiresAt.toISOString() : null;
+}
+
 function freshGithubOrgs(
   user: GithubClaimUser,
   maxAgeMs: number,
@@ -24,13 +46,8 @@ function freshGithubOrgs(
   if (typeof user.githubOrgs !== "string") return null;
   if (typeof user.githubOrgsVerifiedAt !== "string") return null;
 
-  const verifiedAtMs = Date.parse(user.githubOrgsVerifiedAt);
-  if (!Number.isFinite(verifiedAtMs) || verifiedAtMs > now) return null;
-
-  const expiresAtMs = verifiedAtMs + maxAgeMs;
-  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now) return null;
-  const expiresAt = new Date(expiresAtMs);
-  if (!Number.isFinite(expiresAt.getTime())) return null;
+  const expiresAt = evidenceExpiry(user.githubOrgsVerifiedAt, maxAgeMs, now);
+  if (!expiresAt) return null;
 
   let parsed: unknown;
   try {
@@ -47,7 +64,7 @@ function freshGithubOrgs(
 
   return {
     orgs: parsed,
-    expiresAt: expiresAt.toISOString()
+    expiresAt
   };
 }
 
@@ -66,11 +83,25 @@ export function githubClaims(
   now = Date.now()
 ) {
   if (!scopes.includes(GITHUB_SCOPE)) return {};
-  if (typeof user.githubLogin !== "string" || !user.githubLogin) return {};
-
-  const claims: Record<string, unknown> = {
-    [GITHUB_LOGIN_CLAIM]: user.githubLogin
-  };
+  const claims: Record<string, unknown> = {};
+  // The immutable provider ID is identity evidence; login is bounded display
+  // metadata and must never become a durable authorization key.
+  if (typeof user.githubId === "string" && /^[1-9]\d*$/.test(user.githubId)) {
+    claims[GITHUB_ID_CLAIM] = user.githubId;
+  }
+  const loginExpiresAt = evidenceExpiry(
+    user.githubLoginVerifiedAt,
+    maxAgeMs,
+    now
+  );
+  if (
+    typeof user.githubLogin === "string" &&
+    user.githubLogin &&
+    loginExpiresAt
+  ) {
+    claims[GITHUB_LOGIN_CLAIM] = user.githubLogin;
+    claims[GITHUB_LOGIN_EXPIRES_AT_CLAIM] = loginExpiresAt;
+  }
 
   const orgs = freshGithubOrgs(user, maxAgeMs, now);
   if (orgs) {

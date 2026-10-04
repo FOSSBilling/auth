@@ -88,8 +88,18 @@ present; consumers must reject missing or expired organization evidence. A trans
 GitHub failure preserves the last successful list and its original expiry rather than
 extending its lifetime.
 
+`github_id` is the immutable GitHub provider account ID (a decimal string) and is
+the external identity key. `github_login` is display metadata, never an
+authorization key. It is omitted until GitHub authentication verifies it, and
+expires after `GITHUB_ORGS_MAX_AGE_SECONDS`, independently of organization
+lookup success. Consumers must enforce `github_login_expires_at` even if the
+containing token is still valid; reauthenticate with GitHub to refresh it.
+Migration 0009 leaves existing identity evidence null rather than treating
+legacy handles as freshly verified. Apply it before deploying this code.
+
 OAuth clients must request the dedicated `github` scope to receive the linked GitHub
-claims (`github_login`, `github_orgs`, and `github_orgs_expires_at`). Without that scope,
+claims (`github_id`, `github_login`, `github_login_expires_at`, `github_orgs`, and
+`github_orgs_expires_at`). Without that scope,
 those claims are omitted; the central `user_id` claim remains available independently.
 A client's allowed scopes are fixed to whatever list it was created with, so clients
 registered before the `github` scope existed need it backfilled onto their stored
