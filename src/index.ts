@@ -30,6 +30,21 @@ app.use("*", async (c, next) => {
   const cspNonce = newNonce();
   c.set("cspNonce", cspNonce);
   await next();
+  // Navigation redirects (e.g. GET /callback/github) come back from
+  // better-auth as 302 with a JSON content-type and empty body, which
+  // browsers save as a 0-byte file instead of following Location.
+  // Redirects carry no body, so drop those headers and let Location win.
+  if (c.res.status >= 301 && c.res.status <= 308) {
+    // Hono has no header-delete, so rebuild without the body headers.
+    const headers = new Headers(c.res.headers);
+    headers.delete("content-type");
+    headers.delete("content-length");
+    c.res = new Response(c.res.body, {
+      status: c.res.status,
+      statusText: c.res.statusText,
+      headers
+    });
+  }
   // Account and OAuth pages contain session or interaction state. Apply the
   // policy to HTML responses so static assets and public JSON keep theirs.
   if (
