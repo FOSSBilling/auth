@@ -114,9 +114,32 @@ export function signInPage(
     script: `
       const button = document.getElementById('github-sign-in');
       if (!button) return;
+      // Mirror @better-auth/oauth-provider's buildSignedOAuthQuery: only
+      // the signed params (sig + ba_param-listed names) are sent as
+      // oauth_query. Sending the full location.search would include
+      // unsigned params like error=github or callbackURL and fail the
+      // server's signature check on retry.
+      const signedOAuthQuery = () => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          if (!params.has('sig')) return undefined;
+          const signedNames = params.getAll('ba_param');
+          if (!signedNames.length) return undefined;
+          const signed = new URLSearchParams();
+          for (const [key, value] of params.entries()) {
+            if (key === 'sig' || key === 'ba_param' || signedNames.includes(key)) signed.append(key, value);
+          }
+          const query = signed.toString();
+          return query || undefined;
+        } catch { return undefined; }
+      };
       button.addEventListener('click', async () => {
         button.disabled = true;
-        const oauthQuery = window.location.search.slice(1);
+        const oauthQuery = signedOAuthQuery();
+        // disableRedirect keeps better-auth from also setting a Location
+        // header on the 200 JSON body: a 200 + Location to github.com is
+        // non-standard and makes some browsers treat the JSON response
+        // itself as a download instead of letting this script navigate.
         const response = await fetch('/sign-in/social', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -124,7 +147,8 @@ export function signInPage(
             provider: 'github',
             callbackURL: ${jsString(callbackURL)},
             errorCallbackURL: ${jsString(errorRedirect)},
-            oauth_query: oauthQuery || undefined
+            disableRedirect: true,
+            oauth_query: oauthQuery
           })
         });
         const data = await response.json().catch(() => null);
@@ -133,7 +157,14 @@ export function signInPage(
           return;
         }
         button.disabled = false;
-        window.location.href = ${jsString(errorRedirect)};
+        // Preserve the signed OAuth request on retry so a failed attempt
+        // doesn't strand the user on a plain sign-in. The error param stays
+        // unsigned in the page URL only; signedOAuthQuery() strips it back
+        // out before the next POST, so verification still passes.
+        const rawQuery = window.location.search.slice(1);
+        window.location.href = rawQuery
+          ? ${jsString(errorRedirect)} + '&' + rawQuery
+          : ${jsString(errorRedirect)};
       });
     `,
     nonce
@@ -199,8 +230,9 @@ export function consentPage(
           body: JSON.stringify({ accept, oauth_query: window.location.search.slice(1) })
         });
         const data = await response.json().catch(() => null);
-        if (data?.url) {
-          window.location.href = data.url;
+        const target = data?.url || data?.redirect_uri;
+        if (target) {
+          window.location.href = target;
           return;
         }
         window.location.href = accept ? '/account' : '/sign-in';
@@ -319,7 +351,7 @@ export function accountPage(
           const response = await fetch('/link-social', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ provider: 'github', callbackURL: ${jsString(callbackURL)} })
+            body: JSON.stringify({ provider: 'github', callbackURL: ${jsString(callbackURL)}, disableRedirect: true })
           });
           const data = await response.json().catch(() => null);
           if (data?.url) {
