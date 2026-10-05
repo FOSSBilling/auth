@@ -125,3 +125,64 @@ test("auth passthrough is not method-restricted", async () => {
     assert.notEqual(response.status, 404, method);
   }
 });
+
+test("navigation redirects carry no JSON body headers", async () => {
+  // Regression: better-auth emits these as 302 + JSON content-type with
+  // an empty body, which browsers download instead of following.
+  const original = globals.cacheHeaderTestAuth.handler;
+  globals.cacheHeaderTestAuth.handler = async () =>
+    new Response(null, {
+      status: 302,
+      headers: {
+        location: "/account",
+        "content-type": "application/json",
+        "content-length": "0"
+      }
+    });
+  try {
+    const response = await app.fetch(
+      new Request("https://auth.example.com/callback/github?code=c&state=s"),
+      env,
+      ctx
+    );
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), "/account");
+    assert.equal(response.headers.get("content-type"), null);
+    assert.equal(response.headers.get("content-length"), null);
+    assert.equal(await response.text(), "");
+  } finally {
+    globals.cacheHeaderTestAuth.handler = original;
+  }
+});
+
+test("non-empty redirects keep their body headers", async () => {
+  // Only empty redirects are stripped: a redirect carrying a payload
+  // must keep the headers that identify and delimit it.
+  const original = globals.cacheHeaderTestAuth.handler;
+  globals.cacheHeaderTestAuth.handler = async () =>
+    Response.json({ url: "https://example.com/target" }, {
+      status: 302,
+      headers: { location: "https://example.com/target" }
+    });
+  try {
+    const response = await app.fetch(
+      new Request("https://auth.example.com/oauth2/authorize"),
+      env,
+      ctx
+    );
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get("location"),
+      "https://example.com/target"
+    );
+    assert.match(
+      response.headers.get("content-type") ?? "",
+      /application\/json/
+    );
+    assert.deepEqual(await response.json(), {
+      url: "https://example.com/target"
+    });
+  } finally {
+    globals.cacheHeaderTestAuth.handler = original;
+  }
+});
