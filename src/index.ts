@@ -32,11 +32,23 @@ app.use("*", async (c, next) => {
   await next();
   // Navigation redirects (e.g. GET /callback/github) come back from
   // better-auth as 302 with a JSON content-type and empty body, which
-  // browsers save as a 0-byte file instead of following Location.
-  // Redirects carry no body, so drop those headers and let Location win.
-  if (c.res.status >= 301 && c.res.status <= 308) {
-    c.header("content-type", undefined);
-    c.header("content-length", undefined);
+  // browsers save as a 0-byte file instead of following Location. When
+  // the redirect carries no body, drop those headers and let Location
+  // win. Non-empty redirects and 304s are left alone.
+  {
+    const status = c.res.status;
+    const isRedirect =
+      status === 301 ||
+      status === 302 ||
+      status === 303 ||
+      status === 307 ||
+      status === 308;
+    const bodyIsEmpty =
+      c.res.body === null || c.res.headers.get("content-length") === "0";
+    if (isRedirect && c.res.headers.has("location") && bodyIsEmpty) {
+      c.header("content-type", undefined);
+      c.header("content-length", undefined);
+    }
   }
   // Account and OAuth pages contain session or interaction state. Apply the
   // policy to HTML responses so static assets and public JSON keep theirs.

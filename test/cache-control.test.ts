@@ -154,3 +154,35 @@ test("navigation redirects carry no JSON body headers", async () => {
     globals.cacheHeaderTestAuth.handler = original;
   }
 });
+
+test("non-empty redirects keep their body headers", async () => {
+  // Only empty redirects are stripped: a redirect carrying a payload
+  // must keep the headers that identify and delimit it.
+  const original = globals.cacheHeaderTestAuth.handler;
+  globals.cacheHeaderTestAuth.handler = async () =>
+    Response.json({ url: "https://example.com/target" }, {
+      status: 302,
+      headers: { location: "https://example.com/target" }
+    });
+  try {
+    const response = await app.fetch(
+      new Request("https://auth.example.com/oauth2/authorize"),
+      env,
+      ctx
+    );
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get("location"),
+      "https://example.com/target"
+    );
+    assert.match(
+      response.headers.get("content-type") ?? "",
+      /application\/json/
+    );
+    assert.deepEqual(await response.json(), {
+      url: "https://example.com/target"
+    });
+  } finally {
+    globals.cacheHeaderTestAuth.handler = original;
+  }
+});
