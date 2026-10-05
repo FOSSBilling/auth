@@ -201,6 +201,38 @@ test("signInPage threads callbackURL through the script safely", () => {
   assert.ok(!injected.includes("alert(1)</script>"));
 });
 
+test("signInPage avoids the 200+Location download trap", () => {
+  const html = signInPage(null, "/account");
+  assert.ok(
+    html.includes("disableRedirect: true"),
+    "suppresses the non-standard Location header on the JSON body"
+  );
+});
+
+test("signInPage sends only signed OAuth params", () => {
+  const html = signInPage(null, "/account");
+  assert.ok(
+    html.includes("signedOAuthQuery"),
+    "filters location.search to sig/ba_param like buildSignedOAuthQuery"
+  );
+  assert.ok(
+    !html.includes("oauth_query: oauthQuery || undefined"),
+    "never sends the raw query with unsigned params such as error"
+  );
+  assert.ok(
+    html.includes("getAll('ba_param')"),
+    "keeps exactly the server-signed parameter names"
+  );
+});
+
+test("consentPage follows either redirect field", () => {
+  const html = consentPage("c1", "openid");
+  assert.ok(
+    html.includes("data?.url || data?.redirect_uri"),
+    "handles both the fetch JSON shape and the OpenAPI redirect_uri shape"
+  );
+});
+
 test("page builders thread the nonce onto their inline scripts", () => {
   const nonce = "c3BpZHVrZW5vbmNl";
   for (const html of [
@@ -366,6 +398,19 @@ test("accountPage signs out with a JSON body", () => {
   assert.ok(html.includes("fetch('/sign-out', {"));
   assert.ok(html.includes("'content-type': 'application/json'"));
   assert.ok(html.includes('body: "{}"'));
+});
+
+test("accountPage link-social avoids the 200+Location download trap", () => {
+  const html = accountPage(
+    fakeSession(),
+    "https://extensions.fossbilling.org/reconnect",
+    false
+  );
+  assert.ok(html.includes("fetch('/link-social'"));
+  assert.ok(
+    html.includes("disableRedirect: true"),
+    "suppresses the non-standard Location header on the JSON body"
+  );
 });
 
 test("accountPage renders the avatar with fallback initials", () => {

@@ -111,3 +111,17 @@ test("public JSON responses keep their existing cache policy", async () => {
     issuer: "https://auth.example.com"
   });
 });
+
+test("auth passthrough is not method-restricted", async () => {
+  // PATCH/DELETE on /oauth2/* (client management) must reach better-auth's
+  // own 405/JSON handling, not Hono's 404 text. A 404 text body for an API
+  // navigation is what browsers surface as a download prompt.
+  for (const method of ["PATCH", "DELETE", "PUT", "OPTIONS"]) {
+    const response = await app.fetch(
+      new Request("https://auth.example.com/oauth2/token", { method }),
+      env,
+      ctx
+    );
+    assert.notEqual(response.status, 404, method);
+  }
+});

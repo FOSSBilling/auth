@@ -10,7 +10,6 @@ type HonoEnv = {
 };
 
 const app = new Hono<HonoEnv>({ strict: false });
-const authMethods = ["GET", "POST"];
 
 // CSP nonces must be unique per response.
 function newNonce(): string {
@@ -155,14 +154,17 @@ app.get("/account", async (c) => {
   );
 });
 
-app.on(authMethods, "/sign-in/social", handleAuth);
-app.on(authMethods, "/link-social", handleAuth);
-app.on(authMethods, "/callback/:provider", handleAuth);
-app.on(authMethods, "/sign-out", handleAuth);
-app.on(authMethods, "/get-session", handleAuth);
-app.on(authMethods, "/list-sessions", handleAuth);
-app.on(authMethods, "/oauth2/*", handleAuth);
-app.on(authMethods, "/.well-known/*", handleAuth);
+// better-auth owns method validation (405 JSON) for these endpoints —
+// restricting to GET/POST here would turn e.g. PATCH/DELETE on /oauth2/*
+// client-management routes into Hono 404 text instead.
+app.all("/sign-in/social", handleAuth);
+app.all("/link-social", handleAuth);
+app.all("/callback/:provider", handleAuth);
+app.all("/sign-out", handleAuth);
+app.all("/get-session", handleAuth);
+app.all("/list-sessions", handleAuth);
+app.all("/oauth2/*", handleAuth);
+app.all("/.well-known/*", handleAuth);
 
 app.notFound((c) => c.text("Not found", 404));
 
