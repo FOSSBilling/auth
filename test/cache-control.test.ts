@@ -148,6 +148,7 @@ test("navigation redirects carry no JSON body headers", async () => {
     assert.equal(response.status, 302);
     assert.equal(response.headers.get("location"), "/account");
     assert.equal(response.headers.get("content-type"), null);
+    assert.equal(response.headers.get("content-length"), null);
     assert.equal(await response.text(), "");
   } finally {
     globals.cacheHeaderTestAuth.handler = original;
