@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth/minimal";
 import { jwt } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import { getGithubUserInfo, consumeGithubProfile } from "./github";
@@ -71,10 +71,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
   }) {
     const profile = consumeGithubProfile(account.accountId);
     if (!profile) return;
-    // orgs is null when fetchActiveOrgLogins couldn't complete (rate limit,
-    // transient GitHub error) — leave the existing githubOrgs value and its
-    // verification time alone rather than overwriting confirmed data with
-    // "couldn't tell" or extending its lifetime.
+    // A failed fetch may retain last-known-good organization evidence only
+    // for the same immutable GitHub identity. Evaluate that binding inside
+    // the update so concurrent callbacks cannot mix identities and evidence.
     await db
       .update(schema.user)
       .set({
@@ -86,7 +85,10 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
               githubOrgs: JSON.stringify(profile.orgs),
               githubOrgsVerifiedAt: new Date().toISOString()
             }
-          : {})
+          : {
+              githubOrgs: sql`CASE WHEN ${schema.user.githubId} = ${account.accountId} THEN ${schema.user.githubOrgs} ELSE NULL END`,
+              githubOrgsVerifiedAt: sql`CASE WHEN ${schema.user.githubId} = ${account.accountId} THEN ${schema.user.githubOrgsVerifiedAt} ELSE NULL END`
+            })
       })
       .where(eq(schema.user.id, account.userId));
   }

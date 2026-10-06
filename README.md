@@ -85,8 +85,10 @@ membership lookup may be used in the custom `github_orgs` claim. It defaults to 
 (24 hours) when absent or invalid. The issuer also emits the absolute RFC3339
 `https://fossbilling.org/claims/github_orgs_expires_at` claim whenever `github_orgs` is
 present; consumers must reject missing or expired organization evidence. A transient
-GitHub failure preserves the last successful list and its original expiry rather than
-extending its lifetime.
+GitHub failure preserves the last successful list and its original expiry only for
+the same immutable GitHub account. Switching accounts without a successful lookup
+clears organization evidence. Migration `0011` clears existing snapshots whose
+source account cannot be established; a successful GitHub sign-in restores them.
 
 `github_id` is the immutable GitHub provider account ID (a decimal string) and is
 the external identity key. `github_login` is display metadata, never an
