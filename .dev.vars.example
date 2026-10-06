@@ -3,4 +3,4 @@ BETTER_AUTH_SECRET="replace-with-openssl-rand-base64-32"
 GITHUB_CLIENT_ID="replace-with-github-oauth-client-id"
 GITHUB_CLIENT_SECRET="replace-with-github-oauth-client-secret"
 GITHUB_ORGS_MAX_AGE_SECONDS="86400"
-ADMIN_EMAILS="you@example.com"
+ADMIN_USER_IDS="" # Comma-separated local user IDs, provisioned explicitly

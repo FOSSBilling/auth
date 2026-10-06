@@ -12,6 +12,7 @@ import {
   GITHUB_SCOPE
 } from "./github-claims";
 import type { Env } from "./types";
+import { canManageOAuthClients } from "./client-privileges";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
 
@@ -40,15 +41,6 @@ export function isTrustedCallbackUrl(env: Env, url: string): boolean {
   } catch {
     return false;
   }
-}
-
-function isAdminEmail(env: Env, email?: string | null): boolean {
-  if (!email) return false;
-  const admins = (env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  return admins.includes(email.toLowerCase());
 }
 
 // A structural subset of ExecutionContext, so this doesn't depend on
@@ -228,8 +220,8 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         ],
         allowDynamicClientRegistration: false,
         allowUnauthenticatedClientRegistration: false,
-        clientPrivileges: ({ user }) =>
-          Boolean(user?.emailVerified) && isAdminEmail(env, user?.email),
+        clientPrivileges: ({ user, session }) =>
+          canManageOAuthClients(env, user, session),
         accessTokenExpiresIn: 60 * 60,
         idTokenExpiresIn: 60 * 60,
         refreshTokenExpiresIn: 60 * 60 * 24 * 30,

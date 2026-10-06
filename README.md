@@ -72,13 +72,25 @@ server isn't running. Always deploy with `npm run deploy` (not bare
 npx wrangler secret put BETTER_AUTH_SECRET
 npx wrangler secret put GITHUB_CLIENT_ID
 npx wrangler secret put GITHUB_CLIENT_SECRET
-npx wrangler secret put ADMIN_EMAILS
+npx wrangler secret put ADMIN_USER_IDS
 ```
 
-`ADMIN_EMAILS` is a comma-separated list of verified email addresses allowed to manage
-OAuth clients (create/read/update/delete/list/rotate via `/oauth2/*-client` endpoints).
-Anyone who signs in with GitHub gets an identity, but only these addresses can register
-or modify OAuth clients — see [`clientPrivileges`](./src/auth.ts).
+`ADMIN_USER_IDS` is a comma-separated, case-sensitive list of immutable local user IDs
+allowed to manage OAuth clients (create/read/update/delete/list/rotate and configure
+client-credentials scopes). Provision each ID deliberately after confirming the
+intended person's GitHub identity; the local user ID is shown on `/account`.
+Email addresses and email verification do not grant this role. `ADMIN_EMAILS` is
+no longer used: migrate existing administrators explicitly before deploying this
+change. An absent or empty `ADMIN_USER_IDS` denies all client administration.
+
+Client administration also requires a session created less than 15 minutes ago.
+Sliding session renewal does not extend this window. Sign out and sign in again
+with GitHub to regain the window; ordinary account and OAuth usage is unaffected.
+To offboard an administrator, remove their local user ID from `ADMIN_USER_IDS` and
+activate the updated Worker configuration. All subsequent client-management
+requests are denied, including requests with existing sessions. Also revoke their
+sessions and review/deprovision their owned clients and credentials as appropriate;
+removing this role does not invalidate previously issued OAuth tokens or clients.
 
 `GITHUB_ORGS_MAX_AGE_SECONDS` controls how long a successful GitHub organization
 membership lookup may be used in the custom `github_orgs` claim. It defaults to 86400
@@ -174,7 +186,7 @@ POST /oauth2/introspect
 POST /oauth2/revoke
 ```
 
-Dynamic client registration is intentionally disabled. First-party OAuth clients should be created deliberately through an internal/admin process rather than self-service public registration — enforced by `ADMIN_EMAILS` (see [Production Setup](#production-setup)), since otherwise any GitHub-authenticated user could call the authenticated client-management endpoints.
+Dynamic client registration is intentionally disabled. First-party OAuth clients should be created deliberately through an internal/admin process rather than self-service public registration — enforced by `ADMIN_USER_IDS` (see [Production Setup](#production-setup)), since otherwise any GitHub-authenticated user could call the authenticated client-management endpoints.
 
 ## Boundary
 

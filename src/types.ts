@@ -7,7 +7,7 @@ export type Env = {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   GITHUB_ORGS_MAX_AGE_SECONDS?: string;
-  ADMIN_EMAILS?: string;
+  ADMIN_USER_IDS?: string;
 };
 
 export type AppSession = {
