@@ -188,4 +188,14 @@ app.all("/.well-known/*", handleAuth);
 
 app.notFound((c) => c.text("Not found", 404));
 
-export default app;
+// Expiration invalidates abandoned codes but does not remove their D1 rows.
+// Run independently of HTTP traffic and propagate failures to Cron monitoring.
+export default Object.assign(app, {
+  async scheduled(controller: ScheduledController, env: Env) {
+    await env.AUTH_DB.prepare(
+      'DELETE FROM "verification" WHERE "expiresAt" < ?'
+    )
+      .bind(controller.scheduledTime)
+      .run();
+  }
+});
