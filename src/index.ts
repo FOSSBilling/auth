@@ -11,6 +11,38 @@ type HonoEnv = {
 
 const app = new Hono<HonoEnv>({ strict: false });
 
+// The database limiter keys by path. Reject unknown wildcard suffixes before
+// they can create a fresh limiter row for every attacker-chosen URL.
+const oauthPaths = new Set([
+  "/oauth2/authorize",
+  "/oauth2/client/rotate-secret",
+  "/oauth2/consent",
+  "/oauth2/continue",
+  "/oauth2/create-client",
+  "/oauth2/delete-client",
+  "/oauth2/delete-consent",
+  "/oauth2/end-session",
+  "/oauth2/end-session/confirm",
+  "/oauth2/get-client",
+  "/oauth2/get-clients",
+  "/oauth2/get-consent",
+  "/oauth2/get-consents",
+  "/oauth2/introspect",
+  "/oauth2/public-client",
+  "/oauth2/public-client-prelogin",
+  "/oauth2/register",
+  "/oauth2/revoke",
+  "/oauth2/token",
+  "/oauth2/update-client",
+  "/oauth2/update-consent",
+  "/oauth2/userinfo"
+]);
+const wellKnownPaths = new Set([
+  "/.well-known/jwks.json",
+  "/.well-known/oauth-authorization-server",
+  "/.well-known/openid-configuration"
+]);
+
 // CSP nonces must be unique per response.
 function newNonce(): string {
   return btoa(
@@ -175,16 +207,22 @@ app.get("/account", async (c) => {
 });
 
 // better-auth owns method validation (405 JSON) for these endpoints —
-// restricting to GET/POST here would turn e.g. PATCH/DELETE on /oauth2/*
-// client-management routes into Hono 404 text instead.
+// restricting methods here would turn e.g. PATCH/DELETE on /oauth2/*
+// client-management routes into Hono 404 text instead, so match all methods
+// but still reject unknown wildcard suffixes before they can create a fresh
+// database limiter row for every attacker-chosen URL.
 app.all("/sign-in/social", handleAuth);
 app.all("/link-social", handleAuth);
-app.all("/callback/:provider", handleAuth);
+app.all("/callback/github", handleAuth);
 app.all("/sign-out", handleAuth);
 app.all("/get-session", handleAuth);
 app.all("/list-sessions", handleAuth);
-app.all("/oauth2/*", handleAuth);
-app.all("/.well-known/*", handleAuth);
+app.all("/oauth2/*", (c) =>
+  oauthPaths.has(c.req.path) ? handleAuth(c) : c.notFound()
+);
+app.all("/.well-known/*", (c) =>
+  wellKnownPaths.has(c.req.path) ? handleAuth(c) : c.notFound()
+);
 
 app.notFound((c) => c.text("Not found", 404));
 
@@ -196,6 +234,10 @@ export default Object.assign(app, {
       'DELETE FROM "verification" WHERE "expiresAt" < ?'
     )
       .bind(controller.scheduledTime)
+      .run();
+    // Longer than every configured Better Auth window (currently <= 60s).
+    await env.AUTH_DB.prepare("DELETE FROM rateLimit WHERE lastRequest < ?")
+      .bind(Date.now() - 10 * 60 * 1000)
       .run();
   }
 });

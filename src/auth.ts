@@ -92,6 +92,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     secret: env.BETTER_AUTH_SECRET,
     disabledPaths: ["/token"],
     advanced: {
+      // Cloudflare sets this header from the connecting client; forwarded-for
+      // headers can be supplied by the caller and must not select the bucket.
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       // Sign-out revokes the session's tokens and can fire back-channel
       // logout calls to clients — waitUntil keeps those from being cut off
       // once the response is sent.
@@ -104,6 +107,10 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
       schema,
       camelCase: true
     }),
+    rateLimit: {
+      enabled: true,
+      storage: "database"
+    },
     trustedOrigins: getTrustedOrigins(env),
     user: {
       additionalFields: {

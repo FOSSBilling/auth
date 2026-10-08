@@ -93,6 +93,17 @@ export const verification = sqliteTable(
   ]
 );
 
+export const rateLimit = sqliteTable(
+  "rateLimit",
+  {
+    id: id(),
+    key: text("key").notNull().unique(),
+    count: integer("count").notNull(),
+    lastRequest: integer("lastRequest").notNull()
+  },
+  (table) => [index("rateLimit_lastRequest_idx").on(table.lastRequest)]
+);
+
 export const jwks = sqliteTable("jwks", {
   id: id(),
   publicKey: text("publicKey").notNull(),
