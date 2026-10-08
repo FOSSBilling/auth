@@ -11,6 +11,10 @@ import {
   getGithubOrgsMaxAgeMs,
   GITHUB_SCOPE
 } from "./github-claims";
+import {
+  OAUTH_SCOPES,
+  OPAQUE_ACCESS_TOKEN_PREFIX
+} from "./oauth-userinfo-claims";
 import type { Env } from "./types";
 import { canManageOAuthClients } from "./client-privileges";
 import { requireBetterAuthSecret } from "./auth-secret";
@@ -192,15 +196,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
       oauthProvider({
         loginPage: "/sign-in",
         consentPage: "/consent",
-        scopes: ["openid", "profile", "email", "offline_access", GITHUB_SCOPE],
+        scopes: OAUTH_SCOPES,
         advertisedMetadata: {
-          scopes_supported: [
-            "openid",
-            "profile",
-            "email",
-            "offline_access",
-            GITHUB_SCOPE
-          ],
+          scopes_supported: OAUTH_SCOPES,
           claims_supported: [
             "sub",
             "iss",
@@ -236,7 +234,7 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         refreshTokenExpiresIn: 60 * 60 * 24 * 30,
         prefix: {
           clientSecret: "fba_cs_",
-          opaqueAccessToken: "fba_at_",
+          opaqueAccessToken: OPAQUE_ACCESS_TOKEN_PREFIX,
           refreshToken: "fba_rt_"
         },
         customIdTokenClaims: ({ user, scopes }) => ({
