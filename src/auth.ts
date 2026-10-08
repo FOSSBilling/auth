@@ -13,6 +13,7 @@ import {
 } from "./github-claims";
 import type { Env } from "./types";
 import { canManageOAuthClients } from "./client-privileges";
+import { requireBetterAuthSecret } from "./auth-secret";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
 
@@ -51,6 +52,7 @@ type BackgroundTaskContext = {
 };
 
 export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
+  const secret = requireBetterAuthSecret(env.BETTER_AUTH_SECRET);
   const baseURL = getBaseUrl(env);
   const db = drizzle(env.AUTH_DB, { schema });
   const githubOrgsMaxAgeMs = getGithubOrgsMaxAgeMs(
@@ -89,7 +91,7 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     appName: "FOSSBilling",
     baseURL,
     basePath: "/",
-    secret: env.BETTER_AUTH_SECRET,
+    secret,
     disabledPaths: ["/token"],
     advanced: {
       // Cloudflare sets this header from the connecting client; forwarded-for

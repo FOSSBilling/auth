@@ -23,6 +23,7 @@
     "directory": "./public/"
   },
   "vars": {
+    "NODE_ENV": "production",
     "BETTER_AUTH_URL": "https://auth.fossbilling.net",
     "GITHUB_ORGS_MAX_AGE_SECONDS": "86400"
   },

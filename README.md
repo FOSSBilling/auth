@@ -16,7 +16,11 @@ Create local secrets:
 
 ```bash
 cp .dev.vars.example .dev.vars
+openssl rand -base64 32
 ```
+
+Replace the `BETTER_AUTH_SECRET` placeholder in `.dev.vars` with the generated
+value before starting the Worker. The placeholder is deliberately rejected.
 
 Set the GitHub OAuth callback URL to:
 
@@ -69,6 +73,8 @@ server isn't running. Always deploy with `npm run deploy` (not bare
 3. Set Worker secrets:
 
 ```bash
+# Generate a fresh value and paste it when Wrangler prompts. Do not commit it.
+openssl rand -base64 32
 npx wrangler secret put BETTER_AUTH_SECRET
 npx wrangler secret put GITHUB_CLIENT_ID
 npx wrangler secret put GITHUB_CLIENT_SECRET
@@ -91,6 +97,13 @@ activate the updated Worker configuration. All subsequent client-management
 requests are denied, including requests with existing sessions. Also revoke their
 sessions and review/deprovision their owned clients and credentials as appropriate;
 removing this role does not invalidate previously issued OAuth tokens or clients.
+
+Set `BETTER_AUTH_SECRET` separately for every deployed environment, including
+preview environments. The Worker rejects missing, example, short, and low-diversity
+values before constructing Better Auth; `NODE_ENV` is also set to `production` in
+`wrangler.jsonc`. After deployment, request `/sign-in` in each environment and
+confirm it serves normally. A missing or invalid secret makes the request fail
+instead of allowing Better Auth to use its published fallback key.
 
 `GITHUB_ORGS_MAX_AGE_SECONDS` controls how long a successful GitHub organization
 membership lookup may be used in the custom `github_orgs` claim. It defaults to 86400
