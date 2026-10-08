@@ -43,6 +43,21 @@ npm run db:generate -- --name my_change
 npm run db:check
 ```
 
+Before applying migration `0015_strong_forge` to an existing D1
+database, check for provider identities already linked to more than one user:
+
+```sql
+SELECT providerId, accountId, COUNT(*) AS bindings
+FROM account
+GROUP BY providerId, accountId
+HAVING COUNT(*) > 1;
+```
+
+If this returns rows, investigate each binding and its dependent sessions and
+tokens, then reconcile the users before applying the migration. The unique
+index deliberately fails while duplicates remain; it does not choose an
+account owner or delete identity data automatically.
+
 Start the Worker:
 
 ```bash

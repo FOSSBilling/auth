@@ -1,11 +1,13 @@
 import { betterAuth } from "better-auth/minimal";
+import type { BetterAuthOptions } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, notExists, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import { createGithubProfileStaging } from "./github";
+import { cleanupFailedAccountCreation } from "./account-binding";
 import {
   githubClaims,
   getGithubOrgsMaxAgeMs,
@@ -110,11 +112,35 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         ? { handler: (promise) => executionCtx.waitUntil(promise) }
         : undefined
     },
-    database: drizzleAdapter(db, {
-      provider: "sqlite",
-      schema,
-      camelCase: true
-    }),
+    database: (options: BetterAuthOptions) =>
+      cleanupFailedAccountCreation(
+        drizzleAdapter(db, {
+          provider: "sqlite",
+          schema,
+          camelCase: true
+        })(options),
+        async (userId) => {
+          await db
+            .delete(schema.user)
+            .where(
+              and(
+                eq(schema.user.id, userId),
+                notExists(
+                  db
+                    .select({ id: schema.account.id })
+                    .from(schema.account)
+                    .where(eq(schema.account.userId, userId))
+                ),
+                notExists(
+                  db
+                    .select({ id: schema.session.id })
+                    .from(schema.session)
+                    .where(eq(schema.session.userId, userId))
+                )
+              )
+            );
+        }
+      ),
     rateLimit: {
       enabled: true,
       storage: "database"

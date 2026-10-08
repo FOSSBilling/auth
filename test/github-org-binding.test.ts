@@ -47,7 +47,10 @@ async function fixture(previousId: string | null = "100") {
       OPAQUE_ACCESS_TOKEN_PREFIX: "fba_at_"
     },
     "./client-privileges": { canManageOAuthClients: () => false },
-    "./auth-secret": { requireBetterAuthSecret: (value: unknown) => value }
+    "./auth-secret": { requireBetterAuthSecret: (value: unknown) => value },
+    "./account-binding": {
+      cleanupFailedAccountCreation: (adapter: unknown) => adapter
+    }
   };
   const exports: Record<string, any> = {};
   runInNewContext(compiled, {

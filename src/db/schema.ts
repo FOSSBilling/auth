@@ -74,7 +74,13 @@ export const account = sqliteTable(
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull()
   },
-  (table) => [index("account_userId_idx").on(table.userId)]
+  (table) => [
+    index("account_userId_idx").on(table.userId),
+    uniqueIndex("account_providerId_accountId_uidx").on(
+      table.providerId,
+      table.accountId
+    )
+  ]
 );
 
 export const verification = sqliteTable(
