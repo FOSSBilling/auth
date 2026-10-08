@@ -50,6 +50,9 @@ function fixture() {
     id TEXT PRIMARY KEY, "key" TEXT NOT NULL UNIQUE,
     count INTEGER NOT NULL, lastRequest INTEGER NOT NULL
   )`);
+  sql.exec(`CREATE TABLE oauthClientAssertion (
+    id TEXT PRIMARY KEY, expiresAt INTEGER NOT NULL
+  )`);
   sql.exec(migration);
   // Run the production D1 statement against SQLite, using the same millisecond
   // timestamps as the application's Drizzle schema. No cleanup SQL is mocked.
@@ -63,7 +66,8 @@ function fixture() {
           bind(cutoff: number) {
             return {
               async run() {
-                return sql.prepare(query).run(cutoff);
+                const result = sql.prepare(query).run(cutoff);
+                return { meta: { changes: result.changes } };
               }
             };
           }

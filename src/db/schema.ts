@@ -315,7 +315,11 @@ export const oauthClientResource = sqliteTable(
 // Single-use replay guard for private_key_jwt client assertion `jti`
 // values — the row id is a digest of the assertion identifier, so a
 // replayed or concurrent assertion collides on insert.
-export const oauthClientAssertion = sqliteTable("oauthClientAssertion", {
-  id: id(),
-  expiresAt: timestamp("expiresAt").notNull()
-});
+export const oauthClientAssertion = sqliteTable(
+  "oauthClientAssertion",
+  {
+    id: id(),
+    expiresAt: timestamp("expiresAt").notNull()
+  },
+  (table) => [index("oauthClientAssertion_expiresAt_idx").on(table.expiresAt)]
+);

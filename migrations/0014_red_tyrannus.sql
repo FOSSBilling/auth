@@ -1,0 +1,1 @@
+CREATE INDEX `oauthClientAssertion_expiresAt_idx` ON `oauthClientAssertion` (`expiresAt`);

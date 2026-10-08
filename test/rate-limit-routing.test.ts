@@ -75,22 +75,27 @@ test("supported auth paths still reach Better Auth", async () => {
 });
 
 test("scheduled retention deletes only expired limiter rows", async () => {
-  let query = "";
-  let cutoff = 0;
+  const queries: { sql: string; value: number }[] = [];
   const db = {
     prepare(sql: string) {
-      query = sql;
       return {
         bind(value: number) {
-          cutoff = value;
-          return { run: async () => ({ success: true }) };
+          return {
+            run: async () => {
+              queries.push({ sql, value });
+              return { meta: { changes: 0 }, success: true };
+            }
+          };
         }
       };
     }
   };
   const before = Date.now();
   await app.scheduled({} as ScheduledEvent, { AUTH_DB: db } as unknown as Env);
-  assert.equal(query, "DELETE FROM rateLimit WHERE lastRequest < ?");
-  assert.ok(cutoff >= before - 10 * 60 * 1000);
-  assert.ok(cutoff <= Date.now() - 10 * 60 * 1000);
+  const limiter = queries.find(
+    (entry) => entry.sql === "DELETE FROM rateLimit WHERE lastRequest < ?"
+  );
+  assert.ok(limiter, "expected a rateLimit retention delete");
+  assert.ok(limiter.value >= before - 10 * 60 * 1000);
+  assert.ok(limiter.value <= Date.now() - 10 * 60 * 1000);
 });

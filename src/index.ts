@@ -8,6 +8,7 @@ import {
   OAUTH_SCOPES,
   OPAQUE_ACCESS_TOKEN_PREFIX
 } from "./oauth-userinfo-claims";
+import { deleteExpiredClientAssertions } from "./oauth-assertion-cleanup";
 import type { AppSession, Env } from "./types";
 import { accountPage, consentPage, errorPage, signInPage } from "./views";
 
@@ -399,5 +400,6 @@ export default Object.assign(app, {
     await env.AUTH_DB.prepare("DELETE FROM rateLimit WHERE lastRequest < ?")
       .bind(Date.now() - 10 * 60 * 1000)
       .run();
+    await deleteExpiredClientAssertions(env.AUTH_DB);
   }
 });
