@@ -63,7 +63,12 @@ async function getSession(
 }
 
 async function handleAuth(c: Context<HonoEnv>) {
-  return c.get("auth").handler(c.req.raw);
+  const auth = c.get("auth");
+  try {
+    return await auth.handler(c.req.raw);
+  } finally {
+    auth.clearGithubProfileStaging();
+  }
 }
 
 function trustedCallbackUrl(

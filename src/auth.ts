@@ -5,7 +5,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
-import { getGithubUserInfo, consumeGithubProfile } from "./github";
+import { createGithubProfileStaging } from "./github";
 import {
   githubClaims,
   getGithubOrgsMaxAgeMs,
@@ -59,6 +59,8 @@ type BackgroundTaskContext = {
 };
 
 export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
+  const { getGithubUserInfo, consumeGithubProfile, clearGithubProfileStaging } =
+    createGithubProfileStaging();
   const baseURL = getBaseUrl(env);
   const db = drizzle(env.AUTH_DB, { schema });
   const githubOrgsMaxAgeMs = getGithubOrgsMaxAgeMs(
@@ -91,7 +93,7 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
       .where(eq(schema.user.id, account.userId));
   }
 
-  return betterAuth({
+  const auth = betterAuth({
     appName: "FOSSBilling",
     baseURL,
     basePath: "/",
@@ -255,6 +257,8 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
       })
     ]
   });
+
+  return Object.assign(auth, { clearGithubProfileStaging });
 }
 
 export type Auth = ReturnType<typeof createAuth>;
