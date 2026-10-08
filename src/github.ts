@@ -15,20 +15,13 @@ import type { GithubProfile } from "better-auth/social-providers";
 // fetched values keyed by GitHub's numeric id (== the account row's
 // accountId in every sign-in/link path) and auth.ts's databaseHooks reads
 // them back once the account row lands, bypassing that filter entirely.
+// Keep this staging state inside the per-request auth instance so rejected
+// callbacks cannot retain it for the lifetime of the Worker isolate.
 type GithubProfileEvidence = {
   login: string;
   loginVerifiedAt: string;
   orgs: string[] | null;
 };
-const pendingGithubProfiles = new Map<string, GithubProfileEvidence>();
-
-export function consumeGithubProfile(
-  accountId: string
-): GithubProfileEvidence | undefined {
-  const profile = pendingGithubProfiles.get(accountId);
-  pendingGithubProfiles.delete(accountId);
-  return profile;
-}
 
 interface GithubEmail {
   email: string;
@@ -85,68 +78,91 @@ async function fetchActiveOrgLogins(
   }
 }
 
-export async function getGithubUserInfo(token: { accessToken?: string }) {
-  if (!token.accessToken) return null;
-  try {
-    const headers = GITHUB_API_HEADERS(token.accessToken);
-    // All three calls only need the token, so overlap the emails and
-    // org-membership round trips with the profile fetch instead of
-    // trailing behind it.
-    const orgsPending = fetchActiveOrgLogins(token.accessToken);
-    // Awaiting the two responses together keeps either fetch's rejection
-    // inside the surrounding try — a later, conditional await would miss
-    // it on the early-return path below.
-    const [profileResponse, emailsResponse] = await Promise.all([
-      fetch("https://api.github.com/user", { headers }),
-      fetch("https://api.github.com/user/emails", { headers })
-    ]);
-    if (!profileResponse.ok) return null;
-    const profile = (await profileResponse.json()) as GithubProfile;
-    const loginVerifiedAt = new Date().toISOString();
+export function createGithubProfileStaging() {
+  const pendingGithubProfiles = new Map<string, GithubProfileEvidence>();
 
-    let email = profile.email;
-    let emailVerified = false;
-    if (emailsResponse.ok) {
-      const emails = (await emailsResponse.json()) as GithubEmail[];
-      if (!email) {
-        email = (emails.find((e) => e.primary) ?? emails[0])?.email ?? null;
+  function consumeGithubProfile(
+    accountId: string
+  ): GithubProfileEvidence | undefined {
+    const profile = pendingGithubProfiles.get(accountId);
+    pendingGithubProfiles.delete(accountId);
+    return profile;
+  }
+
+  function clearGithubProfileStaging() {
+    pendingGithubProfiles.clear();
+  }
+
+  async function getGithubUserInfo(token: { accessToken?: string }) {
+    if (!token.accessToken) return null;
+    try {
+      const headers = GITHUB_API_HEADERS(token.accessToken);
+      // All three calls only need the token, so overlap the emails and
+      // org-membership round trips with the profile fetch instead of
+      // trailing behind it.
+      const orgsPending = fetchActiveOrgLogins(token.accessToken);
+      // Awaiting the two responses together keeps either fetch's rejection
+      // inside the surrounding try — a later, conditional await would miss
+      // it on the early-return path below.
+      const [profileResponse, emailsResponse] = await Promise.all([
+        fetch("https://api.github.com/user", { headers }),
+        fetch("https://api.github.com/user/emails", { headers })
+      ]);
+      if (!profileResponse.ok) return null;
+      const profile = (await profileResponse.json()) as GithubProfile;
+      const loginVerifiedAt = new Date().toISOString();
+
+      let email = profile.email;
+      let emailVerified = false;
+      if (emailsResponse.ok) {
+        const emails = (await emailsResponse.json()) as GithubEmail[];
+        if (!email) {
+          email = (emails.find((e) => e.primary) ?? emails[0])?.email ?? null;
+        }
+        emailVerified =
+          emails.find((e) => e.email === email)?.verified ?? false;
       }
-      emailVerified = emails.find((e) => e.email === email)?.verified ?? false;
-    }
 
-    // better-auth's user.email column is NOT NULL, and overrideUserInfoOnSignIn
-    // means this return value overwrites the existing row — a GitHub account
-    // with no accessible email (none set, all private) must fail the sign-in
-    // rather than risk writing/overwriting email with null.
-    if (!email) {
-      logger.error(
-        `GitHub sign-in has no accessible email for GitHub user ${profile.id}`
-      );
+      // better-auth's user.email column is NOT NULL, and overrideUserInfoOnSignIn
+      // means this return value overwrites the existing row — a GitHub account
+      // with no accessible email (none set, all private) must fail the sign-in
+      // rather than risk writing/overwriting email with null.
+      if (!email) {
+        logger.error(
+          `GitHub sign-in has no accessible email for GitHub user ${profile.id}`
+        );
+        return null;
+      }
+
+      const githubOrgs = await orgsPending;
+      pendingGithubProfiles.set(String(profile.id), {
+        login: profile.login,
+        loginVerifiedAt,
+        orgs: githubOrgs
+      });
+
+      return {
+        // better-auth resolves the account's provider-assigned id from
+        // `data` (below) via the github provider's `accountSubject`, not from
+        // `user.id` — `user` is only ever applied to the local user row, so
+        // an `id` field here would be inert at best.
+        user: {
+          name: profile.name || profile.login,
+          email,
+          image: profile.avatar_url,
+          emailVerified
+        },
+        data: profile
+      };
+    } catch (error) {
+      logger.error("Failed to fetch GitHub user info:", error);
       return null;
     }
-
-    const githubOrgs = await orgsPending;
-    pendingGithubProfiles.set(String(profile.id), {
-      login: profile.login,
-      loginVerifiedAt,
-      orgs: githubOrgs
-    });
-
-    return {
-      // better-auth resolves the account's provider-assigned id from
-      // `data` (below) via the github provider's `accountSubject`, not from
-      // `user.id` — `user` is only ever applied to the local user row, so
-      // an `id` field here would be inert at best.
-      user: {
-        name: profile.name || profile.login,
-        email,
-        image: profile.avatar_url,
-        emailVerified
-      },
-      data: profile
-    };
-  } catch (error) {
-    logger.error("Failed to fetch GitHub user info:", error);
-    return null;
   }
+
+  return {
+    getGithubUserInfo,
+    consumeGithubProfile,
+    clearGithubProfileStaging
+  };
 }

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import { consumeGithubProfile, getGithubUserInfo } from "../src/github.ts";
+import { createGithubProfileStaging } from "../src/github.ts";
 import { githubClaims } from "../src/github-claims.ts";
 
 test("successful profile refresh renews renamed login even when org fetch fails", async () => {
+  const { getGithubUserInfo, consumeGithubProfile } =
+    createGithubProfileStaging();
   mock.method(globalThis, "fetch", async (url: string) => {
     if (url.endsWith("/user")) {
       return Response.json({
@@ -51,6 +53,8 @@ test("successful profile refresh renews renamed login even when org fetch fails"
 });
 
 test("failed GitHub profile fetch creates no fresh login evidence", async () => {
+  const { getGithubUserInfo, consumeGithubProfile } =
+    createGithubProfileStaging();
   mock.method(
     globalThis,
     "fetch",
@@ -59,6 +63,47 @@ test("failed GitHub profile fetch creates no fresh login evidence", async () => 
   try {
     assert.equal(await getGithubUserInfo({ accessToken: "test-token" }), null);
     assert.equal(consumeGithubProfile("123"), undefined);
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test("rejected link staging is isolated from later auth requests", async () => {
+  let githubId = 122;
+  mock.method(globalThis, "fetch", async (url: string) => {
+    if (url.endsWith("/user")) {
+      return Response.json({
+        id: ++githubId,
+        login: "different-user",
+        email: "different@example.test"
+      });
+    }
+    if (url.endsWith("/emails")) {
+      return Response.json([
+        { email: "different@example.test", verified: true }
+      ]);
+    }
+    return Response.json([]);
+  });
+  try {
+    for (let id = 0; id < 3; id++) {
+      const failedLinkRequest = createGithubProfileStaging();
+      const result = await failedLinkRequest.getGithubUserInfo({
+        accessToken: "test-token"
+      });
+      assert.equal(result?.user.email, "different@example.test");
+      const accountId = String(result?.data.id);
+
+      // A rejected link never runs account hooks. Handler completion clears
+      // its evidence, and a later request cannot see the same GitHub id.
+      const nextRequest = createGithubProfileStaging();
+      assert.equal(nextRequest.consumeGithubProfile(accountId), undefined);
+      failedLinkRequest.clearGithubProfileStaging();
+      assert.equal(
+        failedLinkRequest.consumeGithubProfile(accountId),
+        undefined
+      );
+    }
   } finally {
     mock.restoreAll();
   }

@@ -41,7 +41,13 @@ async function fixture(previousId: string | null = "100") {
     "drizzle-orm/d1": { drizzle: () => db },
     "./db/schema": schema,
     "./github": github,
-    "./github-claims": claims
+    "./github-claims": claims,
+    "./oauth-userinfo-claims": {
+      OAUTH_SCOPES: ["openid", "profile", "email"],
+      OPAQUE_ACCESS_TOKEN_PREFIX: "fba_at_"
+    },
+    "./client-privileges": { canManageOAuthClients: () => false },
+    "./auth-secret": { requireBetterAuthSecret: (value: unknown) => value }
   };
   const exports: Record<string, any> = {};
   runInNewContext(compiled, {
@@ -59,11 +65,18 @@ async function fixture(previousId: string | null = "100") {
   return {
     sqlite,
     hooks,
+    getUserInfo: auth.socialProviders.github.getUserInfo as (token: {
+      accessToken?: string;
+    }) => Promise<unknown>,
     row: () => sqlite.prepare("SELECT * FROM user WHERE id = 'owner'").get()!
   };
 }
 
-async function fetchProfile(accountId: string, orgs: string[] | null) {
+async function fetchProfile(
+  f: Awaited<ReturnType<typeof fixture>>,
+  accountId: string,
+  orgs: string[] | null
+) {
   mock.method(globalThis, "fetch", async (url: string) => {
     if (url.endsWith("/user")) {
       return Response.json({
@@ -79,7 +92,7 @@ async function fetchProfile(accountId: string, orgs: string[] | null) {
       ? new Response(null, { status: 503 })
       : Response.json(orgs.map((login) => ({ organization: { login } })));
   });
-  assert.ok(await github.getGithubUserInfo({ accessToken: "test-token" }));
+  assert.ok(await f.getUserInfo({ accessToken: "test-token" }));
 }
 
 for (const previousId of ["100", null]) {
@@ -87,7 +100,7 @@ for (const previousId of ["100", null]) {
     test(`${hook}: failed lookup cannot carry org evidence from ${previousId} to 200`, async () => {
       const f = await fixture(previousId);
       try {
-        await fetchProfile("200", null);
+        await fetchProfile(f, "200", null);
         await f.hooks[hook].after({ accountId: "200", userId: "owner" });
         const row = f.row();
         assert.equal(row.githubId, "200");
@@ -115,7 +128,7 @@ for (const previousId of ["100", null]) {
 test("same-account failure retains original snapshot and expiry while refreshing login", async () => {
   const f = await fixture();
   try {
-    await fetchProfile("100", null);
+    await fetchProfile(f, "100", null);
     await f.hooks.update.after({ accountId: "100", userId: "owner" });
     const row = f.row();
     assert.equal(row.githubLogin, "new-login");
@@ -139,7 +152,7 @@ for (const orgs of [[], ["new-org"]]) {
   test(`successful replacement stores its own snapshot: ${JSON.stringify(orgs)}`, async () => {
     const f = await fixture();
     try {
-      await fetchProfile("200", orgs);
+      await fetchProfile(f, "200", orgs);
       await f.hooks.create.after({ accountId: "200", userId: "owner" });
       assert.equal(f.row().githubOrgs, JSON.stringify(orgs));
       assert.ok(
@@ -158,7 +171,7 @@ for (const orgs of [[], ["new-org"]]) {
         before,
         "missing pending evidence does not mutate user"
       );
-      await fetchProfile("100", null);
+      await fetchProfile(f, "100", null);
       await f.hooks.update.after({ accountId: "100", userId: "owner" });
       assert.equal(
         f.row().githubOrgs,

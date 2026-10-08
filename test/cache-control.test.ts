@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { Env } from "../src/types.ts";
 
 let signedIn = true;
+let cleanupCalls = 0;
 const session = {
   session: { id: "session", userId: "user", expiresAt: new Date() },
   user: { id: "user", name: "Test User", email: "test@example.com" }
@@ -11,16 +12,22 @@ const session = {
 const globals = globalThis as typeof globalThis & {
   cacheHeaderTestAuth: {
     api: { getSession: () => Promise<typeof session | null> };
-    handler: () => Promise<Response>;
+    handler: (request: Request) => Promise<Response>;
+    clearGithubProfileStaging: () => void;
   };
 };
 globals.cacheHeaderTestAuth = {
   api: { getSession: async () => (signedIn ? session : null) },
-  handler: async () =>
-    Response.json(
-      { issuer: "https://auth.example.com" },
-      { headers: { "cache-control": "public, max-age=300" } }
-    )
+  clearGithubProfileStaging: () => {
+    cleanupCalls++;
+  },
+  handler: async (request) =>
+    request.url.includes("/callback/github")
+      ? new Response("link rejected", { status: 403 })
+      : Response.json(
+          { issuer: "https://auth.example.com" },
+          { headers: { "cache-control": "public, max-age=300" } }
+        )
 };
 
 // Exercise the actual router without D1 or GitHub; only auth is substituted.
@@ -185,4 +192,15 @@ test("non-empty redirects keep their body headers", async () => {
   } finally {
     globals.cacheHeaderTestAuth.handler = original;
   }
+});
+
+test("rejected GitHub callbacks clear request profile staging", async () => {
+  const before = cleanupCalls;
+  const response = await app.fetch(
+    new Request("https://auth.example.com/callback/github"),
+    env,
+    ctx
+  );
+  assert.equal(response.status, 403);
+  assert.equal(cleanupCalls, before + 1);
 });

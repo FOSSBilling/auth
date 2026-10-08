@@ -5,13 +5,17 @@ import type { Env } from "../src/types.ts";
 
 let handled = 0;
 const globals = globalThis as typeof globalThis & {
-  rateLimitRoutingAuth: { handler: () => Promise<Response> };
+  rateLimitRoutingAuth: {
+    handler: () => Promise<Response>;
+    clearGithubProfileStaging: () => void;
+  };
 };
 globals.rateLimitRoutingAuth = {
   handler: async () => {
     handled++;
     return new Response("handled");
-  }
+  },
+  clearGithubProfileStaging: () => {}
 };
 
 const hooks = registerHooks({

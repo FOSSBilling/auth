@@ -12,9 +12,11 @@ const forwarded: Request[] = [];
 const globals = globalThis as typeof globalThis & {
   oauthClaimsTestAuth: {
     handler: (request: Request) => Promise<Response>;
+    clearGithubProfileStaging: () => void;
   };
 };
 globals.oauthClaimsTestAuth = {
+  clearGithubProfileStaging: () => {},
   handler: async (request) => {
     forwarded.push(request);
     if (new URL(request.url).pathname === "/oauth2/userinfo") {

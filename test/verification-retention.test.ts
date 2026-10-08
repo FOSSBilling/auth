@@ -15,7 +15,7 @@ const hooks = registerHooks({
     ) {
       return {
         url: `data:text/javascript,${encodeURIComponent(`
-          export function createAuth() { return { handler: async () => new Response("auth") }; }
+          export function createAuth() { return { handler: async () => new Response("auth"), clearGithubProfileStaging: () => {} }; }
           export function isTrustedCallbackUrl() { return false; }
         `)}`,
         shortCircuit: true
