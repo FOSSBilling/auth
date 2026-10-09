@@ -31,7 +31,11 @@ const hooks = registerHooks({
         shortCircuit: true
       };
     }
-    if (context.parentURL?.includes("/src/") && specifier.startsWith("./")) {
+    if (
+      context.parentURL?.includes("/src/") &&
+      specifier.startsWith("./") &&
+      !specifier.endsWith(".ts")
+    ) {
       return nextResolve(`${specifier}.ts`, context);
     }
     return nextResolve(specifier, context);

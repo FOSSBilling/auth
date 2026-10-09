@@ -120,6 +120,13 @@ values before constructing Better Auth; `NODE_ENV` is also set to `production` i
 confirm it serves normally. A missing or invalid secret makes the request fail
 instead of allowing Better Auth to use its published fallback key.
 
+Collection is limited to four pages (up to
+300 memberships), 256 KiB per response, 8 KiB for the serialized organization
+list, and five seconds. Exceeding any limit leaves organization evidence
+unknown: sign-in can continue, while the previous snapshot and its original
+verification time remain unchanged. An oversized stored snapshot is omitted
+from GitHub claims and treated as needing refresh; lists are never truncated.
+
 `GITHUB_ORGS_MAX_AGE_SECONDS` controls how long a successful GitHub organization
 membership lookup may be used in the custom `github_orgs` claim. It defaults to 86400
 (24 hours) when absent or invalid. The issuer also emits the absolute RFC3339

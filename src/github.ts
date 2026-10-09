@@ -1,5 +1,11 @@
 import { logger } from "@better-auth/core/env";
 import type { GithubProfile } from "better-auth/social-providers";
+import {
+  fitsGithubOrgsBudget,
+  MAX_GITHUB_ORG_FETCH_MS,
+  MAX_GITHUB_ORG_PAGES,
+  MAX_GITHUB_ORG_RESPONSE_BYTES
+} from "./github-org-limits.ts";
 
 // Overrides Better Auth's default GitHub getUserInfo so we can additionally
 // read the user's own org memberships (requires the read:org scope granted
@@ -38,6 +44,53 @@ const GITHUB_API_HEADERS = (accessToken: string) => ({
   Authorization: `Bearer ${accessToken}`
 });
 
+async function readBoundedMemberships(
+  response: Response
+): Promise<GithubOrgMembership[] | null> {
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > MAX_GITHUB_ORG_RESPONSE_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length > 100 ||
+    !parsed.every(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        "organization" in item &&
+        item.organization &&
+        typeof item.organization === "object" &&
+        "login" in item.organization &&
+        typeof item.organization.login === "string"
+    )
+  ) {
+    return null;
+  }
+  return parsed as GithubOrgMembership[];
+}
+
 // Returns null on any failure (rather than a possibly-partial array) so
 // callers can tell "confirmed zero active memberships" apart from "couldn't
 // tell" — persisting the latter as the former would overwrite a
@@ -49,13 +102,16 @@ async function fetchActiveOrgLogins(
   try {
     const logins: string[] = [];
     const perPage = 100;
+    const deadline = Date.now() + MAX_GITHUB_ORG_FETCH_MS;
+    const signal = AbortSignal.timeout(MAX_GITHUB_ORG_FETCH_MS);
     // GitHub paginates this endpoint (default page size 30); loop until a
     // page comes back short of perPage instead of assuming a single page
     // covers every membership.
-    for (let page = 1; ; page++) {
+    for (let page = 1; page <= MAX_GITHUB_ORG_PAGES; page++) {
+      if (Date.now() >= deadline) return null;
       const response = await fetch(
         `https://api.github.com/user/memberships/orgs?state=active&per_page=${perPage}&page=${page}`,
-        { headers: GITHUB_API_HEADERS(accessToken) }
+        { headers: GITHUB_API_HEADERS(accessToken), signal }
       );
       if (!response.ok) {
         logger.error(
@@ -63,11 +119,15 @@ async function fetchActiveOrgLogins(
         );
         return null;
       }
-      const memberships = (await response.json()) as GithubOrgMembership[];
+      const memberships = await readBoundedMemberships(response);
+      if (!memberships || Date.now() >= deadline) return null;
       logins.push(
         ...memberships.map((m) => m.organization.login.toLowerCase())
       );
+      if (!fitsGithubOrgsBudget(logins)) return null;
       if (memberships.length < perPage) break;
+      // A full final page is not proof that the list is complete.
+      if (page === MAX_GITHUB_ORG_PAGES) return null;
     }
     return logins;
   } catch (error) {

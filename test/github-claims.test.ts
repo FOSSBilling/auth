@@ -111,6 +111,23 @@ test("fails closed for malformed stored organization data", () => {
   );
 });
 
+test("oversized stored organization lists are neither fresh nor issued", () => {
+  for (const orgs of [
+    Array.from({ length: 301 }, (_, i) => `org-${i}`),
+    ["x".repeat(8192)]
+  ]) {
+    const user = {
+      githubId: "123",
+      githubOrgs: JSON.stringify(orgs),
+      githubOrgsVerifiedAt: LOGIN_VERIFIED_AT
+    };
+    assert.equal(hasFreshGithubOrgs(user, 86400000, NOW), false);
+    assert.deepEqual(githubClaims(user, 86400000, GITHUB_SCOPES, NOW), {
+      [ID_CLAIM]: "123"
+    });
+  }
+});
+
 test("omits private GitHub claims without the github scope", () => {
   assert.deepEqual(
     githubClaims(

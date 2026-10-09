@@ -1,3 +1,8 @@
+import {
+  fitsGithubOrgsBudget,
+  MAX_GITHUB_ORGS_JSON_BYTES
+} from "./github-org-limits.ts";
+
 const GITHUB_ID_CLAIM = "https://fossbilling.org/claims/github_id";
 const GITHUB_LOGIN_EXPIRES_AT_CLAIM =
   "https://fossbilling.org/claims/github_login_expires_at";
@@ -45,6 +50,11 @@ function freshGithubOrgs(
 ): { orgs: string[]; expiresAt: string } | null {
   if (typeof user.githubOrgs !== "string") return null;
   if (typeof user.githubOrgsVerifiedAt !== "string") return null;
+  if (
+    new TextEncoder().encode(user.githubOrgs).byteLength >
+    MAX_GITHUB_ORGS_JSON_BYTES
+  )
+    return null;
 
   const expiresAt = evidenceExpiry(user.githubOrgsVerifiedAt, maxAgeMs, now);
   if (!expiresAt) return null;
@@ -57,7 +67,8 @@ function freshGithubOrgs(
   }
   if (
     !Array.isArray(parsed) ||
-    !parsed.every((org) => typeof org === "string")
+    !parsed.every((org) => typeof org === "string") ||
+    !fitsGithubOrgsBudget(parsed)
   ) {
     return null;
   }
