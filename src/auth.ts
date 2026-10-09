@@ -1,17 +1,26 @@
 import { betterAuth } from "better-auth/minimal";
+import type { BetterAuthOptions } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { eq } from "drizzle-orm";
+import { and, eq, notExists, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
-import { getGithubUserInfo, consumeGithubProfile } from "./github";
+import { createGithubProfileStaging } from "./github";
+import { cleanupFailedAccountCreation } from "./account-binding";
+import { getAuthSecretOptions } from "./auth-secret";
 import {
   githubClaims,
   getGithubOrgsMaxAgeMs,
   GITHUB_SCOPE
 } from "./github-claims";
+import {
+  OAUTH_SCOPES,
+  OPAQUE_ACCESS_TOKEN_PREFIX
+} from "./oauth-userinfo-claims";
 import type { Env } from "./types";
+import { canManageOAuthClients } from "./client-privileges";
+import { requireBetterAuthSecret } from "./auth-secret";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
 
@@ -42,15 +51,6 @@ export function isTrustedCallbackUrl(env: Env, url: string): boolean {
   }
 }
 
-function isAdminEmail(env: Env, email?: string | null): boolean {
-  if (!email) return false;
-  const admins = (env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  return admins.includes(email.toLowerCase());
-}
-
 // A structural subset of ExecutionContext, so this doesn't depend on
 // whichever workers-types version generated worker-configuration.d.ts —
 // Hono's own ExecutionContext (c.executionCtx in index.ts) satisfies it.
@@ -59,6 +59,13 @@ type BackgroundTaskContext = {
 };
 
 export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
+  // A configured legacy secret is still strength-validated; it becomes
+  // optional only once a versioned keyring carries rotation state.
+  const secret = env.BETTER_AUTH_SECRET
+    ? requireBetterAuthSecret(env.BETTER_AUTH_SECRET)
+    : undefined;
+  const { getGithubUserInfo, consumeGithubProfile, clearGithubProfileStaging } =
+    createGithubProfileStaging();
   const baseURL = getBaseUrl(env);
   const db = drizzle(env.AUTH_DB, { schema });
   const githubOrgsMaxAgeMs = getGithubOrgsMaxAgeMs(
@@ -71,10 +78,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
   }) {
     const profile = consumeGithubProfile(account.accountId);
     if (!profile) return;
-    // orgs is null when fetchActiveOrgLogins couldn't complete (rate limit,
-    // transient GitHub error) — leave the existing githubOrgs value and its
-    // verification time alone rather than overwriting confirmed data with
-    // "couldn't tell" or extending its lifetime.
+    // A failed fetch may retain last-known-good organization evidence only
+    // for the same immutable GitHub identity. Evaluate that binding inside
+    // the update so concurrent callbacks cannot mix identities and evidence.
     await db
       .update(schema.user)
       .set({
@@ -86,18 +92,27 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
               githubOrgs: JSON.stringify(profile.orgs),
               githubOrgsVerifiedAt: new Date().toISOString()
             }
-          : {})
+          : {
+              githubOrgs: sql`CASE WHEN ${schema.user.githubId} = ${account.accountId} THEN ${schema.user.githubOrgs} ELSE NULL END`,
+              githubOrgsVerifiedAt: sql`CASE WHEN ${schema.user.githubId} = ${account.accountId} THEN ${schema.user.githubOrgsVerifiedAt} ELSE NULL END`
+            })
       })
       .where(eq(schema.user.id, account.userId));
   }
 
-  return betterAuth({
+  const auth = betterAuth({
     appName: "FOSSBilling",
     baseURL,
     basePath: "/",
-    secret: env.BETTER_AUTH_SECRET,
+    ...getAuthSecretOptions({
+      BETTER_AUTH_SECRET: secret,
+      BETTER_AUTH_SECRETS: env.BETTER_AUTH_SECRETS
+    }),
     disabledPaths: ["/token"],
     advanced: {
+      // Cloudflare sets this header from the connecting client; forwarded-for
+      // headers can be supplied by the caller and must not select the bucket.
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       // Sign-out revokes the session's tokens and can fire back-channel
       // logout calls to clients — waitUntil keeps those from being cut off
       // once the response is sent.
@@ -105,19 +120,44 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         ? { handler: (promise) => executionCtx.waitUntil(promise) }
         : undefined
     },
-    database: drizzleAdapter(db, {
-      provider: "sqlite",
-      schema,
-      camelCase: true
-    }),
+    database: (options: BetterAuthOptions) =>
+      cleanupFailedAccountCreation(
+        drizzleAdapter(db, {
+          provider: "sqlite",
+          schema,
+          camelCase: true
+        })(options),
+        async (userId) => {
+          await db
+            .delete(schema.user)
+            .where(
+              and(
+                eq(schema.user.id, userId),
+                notExists(
+                  db
+                    .select({ id: schema.account.id })
+                    .from(schema.account)
+                    .where(eq(schema.account.userId, userId))
+                ),
+                notExists(
+                  db
+                    .select({ id: schema.session.id })
+                    .from(schema.session)
+                    .where(eq(schema.session.userId, userId))
+                )
+              )
+            );
+        }
+      ),
+    rateLimit: {
+      enabled: true,
+      storage: "database"
+    },
     trustedOrigins: getTrustedOrigins(env),
     user: {
       additionalFields: {
-        // input: false only blocks these from POST /update-user (so a user
-        // can't forge their own verified org membership) — it does NOT get
-        // them populated from getUserInfo/OAuth profile data, since Better
-        // Auth runs both through the same input-filtered parser. They're
-        // actually written by the databaseHooks below instead.
+        // input: false blocks POST /update-user forgery; values are written
+        // by databaseHooks below, which bypass the input filter.
         githubId: { type: "string", required: false, input: false },
         githubLoginVerifiedAt: {
           type: "string",
@@ -133,9 +173,7 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         }
       }
     },
-    // Keeps name/image in sync on a repeat sign-in or the explicit re-link
-    // flow in views.ts. githubLogin/githubOrgs are handled separately by the
-    // databaseHooks below — see the additionalFields comment above for why.
+    // Keeps name/image in sync on repeat sign-in or re-link in views.ts.
     account: {
       encryptOAuthTokens: true,
       // Keep unauthenticated OAuth starts from writing verification rows to D1.
@@ -149,12 +187,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         updateUserInfoOnLink: true
       }
     },
-    // getGithubUserInfo (github.ts) stashes the freshly-fetched
-    // githubLogin/githubOrgs keyed by the GitHub account's numeric id, which
-    // is always the account row's accountId — in every sign-in/link path,
-    // creating or updating that account row is the one step common to all of
-    // them. Picking the values back up here, and writing them with a direct
-    // query, sidesteps the additionalFields input-filter issue noted above.
+    // getGithubUserInfo stashes login/orgs keyed by GitHub account id;
+    // the account row is the step common to all sign-in/link paths, so pick
+    // the values back up here with a direct query.
     databaseHooks: {
       account: {
         create: { after: persistGithubProfile },
@@ -189,15 +224,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
       oauthProvider({
         loginPage: "/sign-in",
         consentPage: "/consent",
-        scopes: ["openid", "profile", "email", "offline_access", GITHUB_SCOPE],
+        scopes: OAUTH_SCOPES,
         advertisedMetadata: {
-          scopes_supported: [
-            "openid",
-            "profile",
-            "email",
-            "offline_access",
-            GITHUB_SCOPE
-          ],
+          scopes_supported: OAUTH_SCOPES,
           claims_supported: [
             "sub",
             "iss",
@@ -226,14 +255,14 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         ],
         allowDynamicClientRegistration: false,
         allowUnauthenticatedClientRegistration: false,
-        clientPrivileges: ({ user }) =>
-          Boolean(user?.emailVerified) && isAdminEmail(env, user?.email),
+        clientPrivileges: ({ user, session }) =>
+          canManageOAuthClients(env, user, session),
         accessTokenExpiresIn: 60 * 60,
         idTokenExpiresIn: 60 * 60,
         refreshTokenExpiresIn: 60 * 60 * 24 * 30,
         prefix: {
           clientSecret: "fba_cs_",
-          opaqueAccessToken: "fba_at_",
+          opaqueAccessToken: OPAQUE_ACCESS_TOKEN_PREFIX,
           refreshToken: "fba_rt_"
         },
         customIdTokenClaims: ({ user, scopes }) => ({
@@ -255,6 +284,8 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
       })
     ]
   });
+
+  return Object.assign(auth, { clearGithubProfileStaging });
 }
 
 export type Auth = ReturnType<typeof createAuth>;

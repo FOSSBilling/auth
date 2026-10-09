@@ -1,6 +1,15 @@
 import { Hono, type Context } from "hono";
 import { createAuth, isTrustedCallbackUrl, type Auth } from "./auth";
 import { getGithubOrgsMaxAgeMs, hasFreshGithubOrgs } from "./github-claims";
+import {
+  filterUserInfoResponse,
+  hasUnscopedUserInfoClaims,
+  permittedUserInfoClaims,
+  OAUTH_SCOPES,
+  OPAQUE_ACCESS_TOKEN_PREFIX
+} from "./oauth-userinfo-claims";
+import { deleteExpiredClientAssertions } from "./oauth-assertion-cleanup";
+import { deleteExpiredRefreshLineageTombstones } from "./refresh-lineage-cleanup";
 import type { AppSession, Env } from "./types";
 import { accountPage, consentPage, errorPage, signInPage } from "./views";
 
@@ -10,6 +19,38 @@ type HonoEnv = {
 };
 
 const app = new Hono<HonoEnv>({ strict: false });
+
+// The database limiter keys by path. Reject unknown wildcard suffixes before
+// they can create a fresh limiter row for every attacker-chosen URL.
+const oauthPaths = new Set([
+  "/oauth2/authorize",
+  "/oauth2/client/rotate-secret",
+  "/oauth2/consent",
+  "/oauth2/continue",
+  "/oauth2/create-client",
+  "/oauth2/delete-client",
+  "/oauth2/delete-consent",
+  "/oauth2/end-session",
+  "/oauth2/end-session/confirm",
+  "/oauth2/get-client",
+  "/oauth2/get-clients",
+  "/oauth2/get-consent",
+  "/oauth2/get-consents",
+  "/oauth2/introspect",
+  "/oauth2/public-client",
+  "/oauth2/public-client-prelogin",
+  "/oauth2/register",
+  "/oauth2/revoke",
+  "/oauth2/token",
+  "/oauth2/update-client",
+  "/oauth2/update-consent",
+  "/oauth2/userinfo"
+]);
+const wellKnownPaths = new Set([
+  "/.well-known/jwks.json",
+  "/.well-known/oauth-authorization-server",
+  "/.well-known/openid-configuration"
+]);
 
 // CSP nonces must be unique per response.
 function newNonce(): string {
@@ -82,7 +123,162 @@ async function getSession(
 }
 
 async function handleAuth(c: Context<HonoEnv>) {
-  return c.get("auth").handler(c.req.raw);
+  const auth = c.get("auth");
+  try {
+    return await auth.handler(c.req.raw);
+  } finally {
+    auth.clearGithubProfileStaging();
+  }
+}
+
+function parseStoredScopes(value: unknown): string[] | null {
+  try {
+    const scopes = typeof value === "string" ? JSON.parse(value) : value;
+    return Array.isArray(scopes) && scopes.every((s) => typeof s === "string")
+      ? scopes
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function authorizationScopes(
+  c: Context<HonoEnv>,
+  parameters: URLSearchParams
+): Promise<string[]> {
+  const requested = parameters.get("scope");
+  if (requested !== null) return requested.split(" ").filter(Boolean);
+  const clientId = parameters.get("client_id");
+  if (!clientId) return [];
+  const client = await c.env.AUTH_DB.prepare(
+    "SELECT scopes FROM oauthClient WHERE clientId = ?"
+  )
+    .bind(clientId)
+    .first<{ scopes: string | null }>();
+  return client?.scopes === null
+    ? OAUTH_SCOPES
+    : (parseStoredScopes(client?.scopes) ?? []);
+}
+
+async function handleOAuthAuthorize(c: Context<HonoEnv>) {
+  const request = c.req.raw;
+  // The provider reads form fields for POST and URL parameters for GET.
+  const parameters =
+    request.method === "POST"
+      ? request.headers
+          .get("content-type")
+          ?.toLowerCase()
+          .startsWith("application/x-www-form-urlencoded")
+        ? new URLSearchParams(await request.clone().text())
+        : new URLSearchParams()
+      : new URL(request.url).searchParams;
+  const values = parameters.getAll("claims");
+  const scopes = values.length ? await authorizationScopes(c, parameters) : [];
+  if (values.some((value) => hasUnscopedUserInfoClaims(value, scopes))) {
+    // Let the provider reject an invalid claims request so it validates the
+    // client's redirect URI and sends the OAuth error back with the state.
+    // This cannot issue a code: the provider rejects a non-object claims value.
+    if (request.method === "POST") {
+      const body = new URLSearchParams(await request.clone().text());
+      body.set("claims", "null");
+      const headers = new Headers(request.headers);
+      headers.delete("content-length");
+      return c.get("auth").handler(new Request(request, { headers, body }));
+    }
+    const url = new URL(request.url);
+    url.searchParams.set("claims", "null");
+    return c.get("auth").handler(new Request(url, request));
+  }
+  return handleAuth(c);
+}
+
+async function handleOAuthConsent(c: Context<HonoEnv>) {
+  const request = c.req.raw;
+  let body: unknown;
+  try {
+    body = await request.clone().json();
+  } catch {
+    return handleAuth(c);
+  }
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return handleAuth(c);
+  }
+  // The provider defaults omitted claims to every claim in the signed request.
+  // Submit only claims backed by scopes the user actually accepted.
+  const submitted = body as Record<string, unknown>;
+  const query = new URLSearchParams(
+    typeof submitted.oauth_query === "string" ? submitted.oauth_query : ""
+  );
+  const scopes =
+    typeof submitted.scope === "string"
+      ? submitted.scope.split(" ").filter(Boolean)
+      : await authorizationScopes(c, query);
+  const requestedClaims =
+    submitted.claims === undefined ? query.get("claims") : submitted.claims;
+  const userinfo = permittedUserInfoClaims(requestedClaims, scopes);
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+  return c.get("auth").handler(
+    new Request(request, {
+      headers,
+      body: JSON.stringify({ ...submitted, claims: { userinfo } })
+    })
+  );
+}
+
+async function handleOAuthUserInfo(c: Context<HonoEnv>) {
+  const request = c.req.raw;
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+  const headerToken =
+    /^(?:Bearer|DPoP)\s+(.+)$/i.exec(authorization)?.[1]?.trim() ||
+    authorization ||
+    null;
+  const bodyToken =
+    request.method === "POST" &&
+    request.headers
+      .get("content-type")
+      ?.toLowerCase()
+      .startsWith("application/x-www-form-urlencoded")
+      ? new URLSearchParams(await request.clone().text()).get("access_token")
+      : null;
+  const token = headerToken ?? bodyToken;
+  const response = await handleAuth(c);
+  if (!response.ok) return response;
+  if (!token) return c.text("Unable to validate UserInfo token", 502);
+  // JWT access tokens do not carry individually requested UserInfo claims.
+  if (!token?.startsWith(OPAQUE_ACCESS_TOKEN_PREFIX)) return response;
+
+  // The provider stores opaque tokens as unpadded base64url SHA-256 digests.
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(token.slice(OPAQUE_ACCESS_TOKEN_PREFIX.length))
+  );
+  const storedToken = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  const row = await c.env.AUTH_DB.prepare(
+    "SELECT scopes FROM oauthAccessToken WHERE token = ?"
+  )
+    .bind(storedToken)
+    .first<{ scopes: string }>();
+  const scopes = parseStoredScopes(row?.scopes);
+  if (
+    !scopes ||
+    !response.headers.get("content-type")?.includes("application/json")
+  )
+    return c.text("Unable to validate UserInfo scopes", 502);
+  const claims: unknown = await response.json();
+  if (claims === null || typeof claims !== "object" || Array.isArray(claims))
+    return c.text("Unable to validate UserInfo claims", 502);
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(
+    JSON.stringify(
+      filterUserInfoResponse(claims as Record<string, unknown>, scopes)
+    ),
+    { status: response.status, statusText: response.statusText, headers }
+  );
 }
 
 function trustedCallbackUrl(
@@ -174,18 +370,50 @@ app.get("/account", async (c) => {
   );
 });
 
-// better-auth owns method validation (405 JSON) for these endpoints —
-// restricting to GET/POST here would turn e.g. PATCH/DELETE on /oauth2/*
-// client-management routes into Hono 404 text instead.
+// better-auth owns method validation (405 JSON); match all methods here so
+// e.g. PATCH/DELETE on /oauth2/* reach it instead of Hono's 404 text.
+// Unknown wildcard suffixes are still rejected below before they can mint
+// database limiter rows for attacker-chosen URLs.
 app.all("/sign-in/social", handleAuth);
 app.all("/link-social", handleAuth);
-app.all("/callback/:provider", handleAuth);
+app.all("/callback/github", handleAuth);
 app.all("/sign-out", handleAuth);
 app.all("/get-session", handleAuth);
+// Session inventory carries credential-adjacent metadata. Keep it out of
+// shared caches regardless of the upstream cache policy.
+app.use("/list-sessions", async (c, next) => {
+  await next();
+  c.header("cache-control", "no-store, private, max-age=0");
+  c.header("pragma", "no-cache");
+  c.header("expires", "0");
+});
 app.all("/list-sessions", handleAuth);
-app.all("/oauth2/*", handleAuth);
-app.all("/.well-known/*", handleAuth);
+app.all("/oauth2/authorize", handleOAuthAuthorize);
+app.post("/oauth2/consent", handleOAuthConsent);
+app.all("/oauth2/userinfo", handleOAuthUserInfo);
+app.all("/oauth2/*", (c) =>
+  oauthPaths.has(c.req.path) ? handleAuth(c) : c.notFound()
+);
+app.all("/.well-known/*", (c) =>
+  wellKnownPaths.has(c.req.path) ? handleAuth(c) : c.notFound()
+);
 
 app.notFound((c) => c.text("Not found", 404));
 
-export default app;
+// Expiration invalidates abandoned codes but does not remove their D1 rows.
+// Run independently of HTTP traffic and propagate failures to Cron monitoring.
+export default Object.assign(app, {
+  async scheduled(controller: ScheduledController, env: Env) {
+    await env.AUTH_DB.prepare(
+      'DELETE FROM "verification" WHERE "expiresAt" < ?'
+    )
+      .bind(controller.scheduledTime)
+      .run();
+    // Longer than every configured Better Auth window (currently <= 60s).
+    await env.AUTH_DB.prepare("DELETE FROM rateLimit WHERE lastRequest < ?")
+      .bind(Date.now() - 10 * 60 * 1000)
+      .run();
+    await deleteExpiredClientAssertions(env.AUTH_DB);
+    await deleteExpiredRefreshLineageTombstones(env.AUTH_DB);
+  }
+});

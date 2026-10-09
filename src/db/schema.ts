@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex
@@ -18,16 +19,10 @@ export const user = sqliteTable("user", {
   image: text("image"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
-  // Linked GitHub identity, refreshed on every GitHub sign-in. githubOrgs is
-  // a JSON-encoded array of lowercase org logins where membership state is
-  // "active", fetched with the read:org scope so private memberships are
-  // included — used downstream (extensions/api repos) to verify developer
-  // profile claims. Null until the user completes a GitHub login after this
-  // scope was added. githubOrgsVerifiedAt is updated only after a successful
-  // membership fetch; a failed fetch preserves both the list and timestamp
-  // as last-known-good data.
-  // Provider ID is immutable. Login evidence expires independently of orgs;
-  // legacy rows stay unverified until a successful GitHub authentication.
+  // GitHub identity snapshot: lowercase active-membership org logins
+  // (read:org scope, includes private memberships). Null until first GitHub
+  // login; a failed fetch preserves prior evidence for the same GitHub ID
+  // and clears it on identity change. Login evidence expires independently.
   githubId: text("githubId"),
   githubLoginVerifiedAt: text("githubLoginVerifiedAt"),
   githubLogin: text("githubLogin"),
@@ -74,7 +69,13 @@ export const account = sqliteTable(
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull()
   },
-  (table) => [index("account_userId_idx").on(table.userId)]
+  (table) => [
+    index("account_userId_idx").on(table.userId),
+    uniqueIndex("account_providerId_accountId_uidx").on(
+      table.providerId,
+      table.accountId
+    )
+  ]
 );
 
 export const verification = sqliteTable(
@@ -87,7 +88,21 @@ export const verification = sqliteTable(
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull()
   },
-  (table) => [index("verification_identifier_idx").on(table.identifier)]
+  (table) => [
+    index("verification_identifier_idx").on(table.identifier),
+    index("verification_expiresAt_idx").on(table.expiresAt)
+  ]
+);
+
+export const rateLimit = sqliteTable(
+  "rateLimit",
+  {
+    id: id(),
+    key: text("key").notNull().unique(),
+    count: integer("count").notNull(),
+    lastRequest: integer("lastRequest").notNull()
+  },
+  (table) => [index("rateLimit_lastRequest_idx").on(table.lastRequest)]
 );
 
 export const jwks = sqliteTable("jwks", {
@@ -191,6 +206,23 @@ export const oauthRefreshToken = sqliteTable(
     index("oauthRefreshToken_authorizationCodeId_idx").on(
       table.authorizationCodeId
     )
+  ]
+);
+
+// A deleted refresh lineage cannot be recreated by an in-flight rotation.
+// The database triggers in migration 0017 enforce this at insert time.
+export const oauthRefreshLineageTombstone = sqliteTable(
+  "oauthRefreshLineageTombstone",
+  {
+    clientId: text("clientId").notNull(),
+    userId: text("userId").notNull(),
+    authorizationCodeId: text("authorizationCodeId").notNull(),
+    invalidatedAt: timestamp("invalidatedAt").notNull()
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.clientId, table.userId, table.authorizationCodeId]
+    })
   ]
 );
 
@@ -301,7 +333,11 @@ export const oauthClientResource = sqliteTable(
 // Single-use replay guard for private_key_jwt client assertion `jti`
 // values — the row id is a digest of the assertion identifier, so a
 // replayed or concurrent assertion collides on insert.
-export const oauthClientAssertion = sqliteTable("oauthClientAssertion", {
-  id: id(),
-  expiresAt: timestamp("expiresAt").notNull()
-});
+export const oauthClientAssertion = sqliteTable(
+  "oauthClientAssertion",
+  {
+    id: id(),
+    expiresAt: timestamp("expiresAt").notNull()
+  },
+  (table) => [index("oauthClientAssertion_expiresAt_idx").on(table.expiresAt)]
+);

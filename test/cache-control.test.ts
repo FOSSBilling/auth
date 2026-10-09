@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import { test } from "node:test";
 import type { Env } from "../src/types.ts";
+import { registerRouterTestHooks } from "./_hooks.ts";
 
 let signedIn = true;
+let cleanupCalls = 0;
 const session = {
   session: { id: "session", userId: "user", expiresAt: new Date() },
   user: { id: "user", name: "Test User", email: "test@example.com" }
@@ -11,39 +12,31 @@ const session = {
 const globals = globalThis as typeof globalThis & {
   cacheHeaderTestAuth: {
     api: { getSession: () => Promise<typeof session | null> };
-    handler: () => Promise<Response>;
+    handler: (request: Request) => Promise<Response>;
+    clearGithubProfileStaging: () => void;
   };
 };
 globals.cacheHeaderTestAuth = {
   api: { getSession: async () => (signedIn ? session : null) },
-  handler: async () =>
-    Response.json(
-      { issuer: "https://auth.example.com" },
-      { headers: { "cache-control": "public, max-age=300" } }
-    )
+  clearGithubProfileStaging: () => {
+    cleanupCalls++;
+  },
+  handler: async (request: Request) =>
+    request.url.includes("/callback/github")
+      ? new Response("link rejected", { status: 403 })
+      : Response.json(
+          new URL(request.url).pathname.startsWith("/list-sessions")
+            ? [{ token: "database-token", ipAddress: "192.0.2.1" }]
+            : { issuer: "https://auth.example.com" },
+          { headers: { "cache-control": "public, max-age=300" } }
+        )
 };
 
 // Exercise the actual router without D1 or GitHub; only auth is substituted.
-// Resolve the Worker's extensionless imports for Node's TypeScript runner.
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      context.parentURL?.endsWith("/src/index.ts") &&
-      specifier === "./auth"
-    ) {
-      const source = `export function createAuth() { return globalThis.cacheHeaderTestAuth; }
-        export function isTrustedCallbackUrl() { return false; }`;
-      return {
-        url: `data:text/javascript,${encodeURIComponent(source)}`,
-        shortCircuit: true
-      };
-    }
-    if (context.parentURL?.includes("/src/") && specifier.startsWith("./")) {
-      return nextResolve(`${specifier}.ts`, context);
-    }
-    return nextResolve(specifier, context);
-  }
-});
+const hooks = registerRouterTestHooks(
+  `export function createAuth() { return globalThis.cacheHeaderTestAuth; }
+   export function isTrustedCallbackUrl() { return false; }`
+);
 const { default: app } = await import("../src/index.ts");
 hooks.deregister();
 const env = {} as Env;
@@ -110,6 +103,17 @@ test("public JSON responses keep their existing cache policy", async () => {
   assert.deepEqual(await response.json(), {
     issuer: "https://auth.example.com"
   });
+});
+
+test("rejected GitHub callbacks clear request profile staging", async () => {
+  const before = cleanupCalls;
+  const response = await app.fetch(
+    new Request("https://auth.example.com/callback/github"),
+    env,
+    ctx
+  );
+  assert.equal(response.status, 403);
+  assert.equal(cleanupCalls, before + 1);
 });
 
 test("auth passthrough is not method-restricted", async () => {
@@ -184,5 +188,35 @@ test("non-empty redirects keep their body headers", async () => {
     });
   } finally {
     globals.cacheHeaderTestAuth.handler = original;
+  }
+});
+
+test("session inventory JSON forbids storage across route forms and methods", async () => {
+  for (const [path, method] of [
+    ["/list-sessions", "GET"],
+    ["/list-sessions/", "GET"],
+    ["/list-sessions?source=account", "GET"],
+    ["/list-sessions", "HEAD"]
+  ]) {
+    const response = await app.fetch(
+      new Request(`https://auth.example.com${path}`, { method }),
+      env,
+      ctx
+    );
+    assert.equal(response.status, 200, path);
+    assert.equal(
+      response.headers.get("cache-control"),
+      "no-store, private, max-age=0",
+      path
+    );
+    assert.equal(response.headers.get("pragma"), "no-cache", path);
+    assert.equal(response.headers.get("expires"), "0", path);
+    if (method === "HEAD") {
+      assert.equal(await response.text(), "");
+    } else {
+      assert.deepEqual(await response.json(), [
+        { token: "database-token", ipAddress: "192.0.2.1" }
+      ]);
+    }
   }
 });

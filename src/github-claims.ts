@@ -9,6 +9,21 @@ const GITHUB_ORGS_EXPIRES_AT_CLAIM =
 export const GITHUB_SCOPE = "github" as const;
 export const DEFAULT_GITHUB_ORGS_MAX_AGE_SECONDS = 24 * 60 * 60;
 
+// A complete membership snapshot must fit both D1 and the OAuth claim.
+export const MAX_GITHUB_ORG_PAGES = 4;
+export const MAX_GITHUB_ORGS = 300;
+export const MAX_GITHUB_ORG_RESPONSE_BYTES = 256 * 1024;
+export const MAX_GITHUB_ORGS_JSON_BYTES = 8 * 1024;
+export const MAX_GITHUB_ORG_FETCH_MS = 5_000;
+
+export function fitsGithubOrgsBudget(orgs: string[]): boolean {
+  return (
+    orgs.length <= MAX_GITHUB_ORGS &&
+    new TextEncoder().encode(JSON.stringify(orgs)).byteLength <=
+      MAX_GITHUB_ORGS_JSON_BYTES
+  );
+}
+
 type GithubClaimUser = Record<string, unknown>;
 
 export function getGithubOrgsMaxAgeMs(raw?: string): number {
@@ -45,6 +60,11 @@ function freshGithubOrgs(
 ): { orgs: string[]; expiresAt: string } | null {
   if (typeof user.githubOrgs !== "string") return null;
   if (typeof user.githubOrgsVerifiedAt !== "string") return null;
+  if (
+    new TextEncoder().encode(user.githubOrgs).byteLength >
+    MAX_GITHUB_ORGS_JSON_BYTES
+  )
+    return null;
 
   const expiresAt = evidenceExpiry(user.githubOrgsVerifiedAt, maxAgeMs, now);
   if (!expiresAt) return null;
@@ -57,7 +77,8 @@ function freshGithubOrgs(
   }
   if (
     !Array.isArray(parsed) ||
-    !parsed.every((org) => typeof org === "string")
+    !parsed.every((org) => typeof org === "string") ||
+    !fitsGithubOrgsBudget(parsed)
   ) {
     return null;
   }
