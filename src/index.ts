@@ -369,11 +369,10 @@ app.get("/account", async (c) => {
   );
 });
 
-// better-auth owns method validation (405 JSON) for these endpoints —
-// restricting methods here would turn e.g. PATCH/DELETE on /oauth2/*
-// client-management routes into Hono 404 text instead, so match all methods
-// but still reject unknown wildcard suffixes before they can create a fresh
-// database limiter row for every attacker-chosen URL.
+// better-auth owns method validation (405 JSON); match all methods here so
+// e.g. PATCH/DELETE on /oauth2/* reach it instead of Hono's 404 text.
+// Unknown wildcard suffixes are still rejected below before they can mint
+// database limiter rows for attacker-chosen URLs.
 app.all("/sign-in/social", handleAuth);
 app.all("/link-social", handleAuth);
 app.all("/callback/github", handleAuth);

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { betterAuth } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { jwt } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import type { Env } from "../src/types.ts";
+import { registerRouterTestHooks } from "./_hooks.ts";
 
 const forwarded: Request[] = [];
 const globals = globalThis as typeof globalThis & {
@@ -33,32 +33,10 @@ globals.oauthClaimsTestAuth = {
   }
 };
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      context.parentURL?.endsWith("/src/index.ts") &&
-      specifier === "./auth"
-    ) {
-      return {
-        url: `data:text/javascript,${encodeURIComponent(
-          `export function createAuth() { return globalThis.oauthClaimsTestAuth; }
-           export function isTrustedCallbackUrl() { return false; }
-           export const OAUTH_SCOPES = ["openid", "profile", "email"];
-           export const OPAQUE_ACCESS_TOKEN_PREFIX = "fba_at_";`
-        )}`,
-        shortCircuit: true
-      };
-    }
-    if (
-      context.parentURL?.includes("/src/") &&
-      specifier.startsWith("./") &&
-      !specifier.endsWith(".ts")
-    ) {
-      return nextResolve(`${specifier}.ts`, context);
-    }
-    return nextResolve(specifier, context);
-  }
-});
+const hooks = registerRouterTestHooks(
+  `export function createAuth() { return globalThis.oauthClaimsTestAuth; }
+   export function isTrustedCallbackUrl() { return false; }`
+);
 const { default: app } = await import("../src/index.ts");
 hooks.deregister();
 let clientScopes: string[] | null = ["openid", "email"];

@@ -5,24 +5,14 @@ import {
   MAX_GITHUB_ORG_FETCH_MS,
   MAX_GITHUB_ORG_PAGES,
   MAX_GITHUB_ORG_RESPONSE_BYTES
-} from "./github-org-limits.ts";
+} from "./github-claims.ts";
 
-// Overrides Better Auth's default GitHub getUserInfo so we can additionally
-// read the user's own org memberships (requires the read:org scope granted
-// in auth.ts) and persist them onto the user row as githubLogin/githubOrgs,
-// plus a successful-fetch timestamp — see the comment on those columns in
-// db/schema.ts for why.
-//
-// Returning githubLogin/githubOrgs directly on getUserInfo's `user` object
-// would NOT persist them: Better Auth's additionalFields `input: false`
-// (required so a signed-in user can't forge these via POST /update-user)
-// makes it strip any field with that flag out of the OAuth profile too,
-// via the same schema used for client input. So this instead stashes the
-// fetched values keyed by GitHub's numeric id (== the account row's
-// accountId in every sign-in/link path) and auth.ts's databaseHooks reads
-// them back once the account row lands, bypassing that filter entirely.
-// Keep this staging state inside the per-request auth instance so rejected
-// callbacks cannot retain it for the lifetime of the Worker isolate.
+// Also reads the user's org memberships (needs the read:org scope in
+// auth.ts) and persists them as githubLogin/githubOrgs — see db/schema.ts.
+// getUserInfo cannot return these directly: additionalFields `input: false`
+// strips them from OAuth profiles too, so they are stashed here keyed by
+// GitHub id and picked up by auth.ts's databaseHooks. Per-request state so
+// rejected callbacks cannot leak across Worker isolates.
 type GithubProfileEvidence = {
   login: string;
   loginVerifiedAt: string;

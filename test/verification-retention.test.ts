@@ -1,36 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { betterAuth } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import type { Env } from "../src/types.ts";
+import { registerRouterTestHooks } from "./_hooks.ts";
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      context.parentURL?.endsWith("/src/index.ts") &&
-      specifier === "./auth"
-    ) {
-      return {
-        url: `data:text/javascript,${encodeURIComponent(`
-          export function createAuth() { return { handler: async () => new Response("auth"), clearGithubProfileStaging: () => {} }; }
-          export function isTrustedCallbackUrl() { return false; }
-        `)}`,
-        shortCircuit: true
-      };
-    }
-    if (
-      context.parentURL?.includes("/src/") &&
-      specifier.startsWith("./") &&
-      !specifier.endsWith(".ts")
-    ) {
-      return nextResolve(`${specifier}.ts`, context);
-    }
-    return nextResolve(specifier, context);
-  }
-});
+const hooks = registerRouterTestHooks(
+  `export function createAuth() { return { handler: async () => new Response("auth"), clearGithubProfileStaging: () => {} }; }
+   export function isTrustedCallbackUrl() { return false; }`
+);
 const { default: worker } = await import("../src/index.ts");
 hooks.deregister();
 

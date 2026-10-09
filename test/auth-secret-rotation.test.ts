@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { betterAuth } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { jwt } from "better-auth/plugins";
-import { getAuthSecretOptions } from "../src/auth-secrets.ts";
+import { getAuthSecretOptions } from "../src/auth-secret.ts";
 
 const oldSecret = "test-only-original-secret-at-least-32-characters";
 const newSecret = "test-only-replacement-secret-at-least-32-characters";
@@ -73,7 +73,7 @@ test("secret configuration rejects missing, malformed, and duplicate versions", 
     secret: oldSecret
   });
   assert.throws(() => getAuthSecretOptions({}));
-  for (const keyring of ["one:secret", "1:", "1:one,1:two", "1:one,"]) {
+  for (const keyring of ["one:secret", "1:", "1:one,1:two", "1:one,", "1:short"]) {
     assert.throws(() => getAuthSecretOptions({ BETTER_AUTH_SECRETS: keyring }));
   }
 });

@@ -1,8 +1,3 @@
-import {
-  fitsGithubOrgsBudget,
-  MAX_GITHUB_ORGS_JSON_BYTES
-} from "./github-org-limits.ts";
-
 const GITHUB_ID_CLAIM = "https://fossbilling.org/claims/github_id";
 const GITHUB_LOGIN_EXPIRES_AT_CLAIM =
   "https://fossbilling.org/claims/github_login_expires_at";
@@ -13,6 +8,21 @@ const GITHUB_ORGS_EXPIRES_AT_CLAIM =
 
 export const GITHUB_SCOPE = "github" as const;
 export const DEFAULT_GITHUB_ORGS_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+// A complete membership snapshot must fit both D1 and the OAuth claim.
+export const MAX_GITHUB_ORG_PAGES = 4;
+export const MAX_GITHUB_ORGS = 300;
+export const MAX_GITHUB_ORG_RESPONSE_BYTES = 256 * 1024;
+export const MAX_GITHUB_ORGS_JSON_BYTES = 8 * 1024;
+export const MAX_GITHUB_ORG_FETCH_MS = 5_000;
+
+export function fitsGithubOrgsBudget(orgs: string[]): boolean {
+  return (
+    orgs.length <= MAX_GITHUB_ORGS &&
+    new TextEncoder().encode(JSON.stringify(orgs)).byteLength <=
+      MAX_GITHUB_ORGS_JSON_BYTES
+  );
+}
 
 type GithubClaimUser = Record<string, unknown>;
 

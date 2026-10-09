@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import { test } from "node:test";
 import type { Env } from "../src/types.ts";
+import { registerRouterTestHooks } from "./_hooks.ts";
 
 let signedIn = true;
 let cleanupCalls = 0;
@@ -33,30 +33,10 @@ globals.cacheHeaderTestAuth = {
 };
 
 // Exercise the actual router without D1 or GitHub; only auth is substituted.
-// Resolve the Worker's extensionless imports for Node's TypeScript runner.
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      context.parentURL?.endsWith("/src/index.ts") &&
-      specifier === "./auth"
-    ) {
-      const source = `export function createAuth() { return globalThis.cacheHeaderTestAuth; }
-        export function isTrustedCallbackUrl() { return false; }`;
-      return {
-        url: `data:text/javascript,${encodeURIComponent(source)}`,
-        shortCircuit: true
-      };
-    }
-    if (
-      context.parentURL?.includes("/src/") &&
-      specifier.startsWith("./") &&
-      !specifier.endsWith(".ts")
-    ) {
-      return nextResolve(`${specifier}.ts`, context);
-    }
-    return nextResolve(specifier, context);
-  }
-});
+const hooks = registerRouterTestHooks(
+  `export function createAuth() { return globalThis.cacheHeaderTestAuth; }
+   export function isTrustedCallbackUrl() { return false; }`
+);
 const { default: app } = await import("../src/index.ts");
 hooks.deregister();
 const env = {} as Env;

@@ -8,7 +8,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import { createGithubProfileStaging } from "./github";
 import { cleanupFailedAccountCreation } from "./account-binding";
-import { getAuthSecretOptions } from "./auth-secrets";
+import { getAuthSecretOptions } from "./auth-secret";
 import {
   githubClaims,
   getGithubOrgsMaxAgeMs,
@@ -156,11 +156,8 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     trustedOrigins: getTrustedOrigins(env),
     user: {
       additionalFields: {
-        // input: false only blocks these from POST /update-user (so a user
-        // can't forge their own verified org membership) — it does NOT get
-        // them populated from getUserInfo/OAuth profile data, since Better
-        // Auth runs both through the same input-filtered parser. They're
-        // actually written by the databaseHooks below instead.
+        // input: false blocks POST /update-user forgery; values are written
+        // by databaseHooks below, which bypass the input filter.
         githubId: { type: "string", required: false, input: false },
         githubLoginVerifiedAt: {
           type: "string",
@@ -176,9 +173,7 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         }
       }
     },
-    // Keeps name/image in sync on a repeat sign-in or the explicit re-link
-    // flow in views.ts. githubLogin/githubOrgs are handled separately by the
-    // databaseHooks below — see the additionalFields comment above for why.
+    // Keeps name/image in sync on repeat sign-in or re-link in views.ts.
     account: {
       encryptOAuthTokens: true,
       // Keep unauthenticated OAuth starts from writing verification rows to D1.
@@ -192,12 +187,9 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
         updateUserInfoOnLink: true
       }
     },
-    // getGithubUserInfo (github.ts) stashes the freshly-fetched
-    // githubLogin/githubOrgs keyed by the GitHub account's numeric id, which
-    // is always the account row's accountId — in every sign-in/link path,
-    // creating or updating that account row is the one step common to all of
-    // them. Picking the values back up here, and writing them with a direct
-    // query, sidesteps the additionalFields input-filter issue noted above.
+    // getGithubUserInfo stashes login/orgs keyed by GitHub account id;
+// the account row is the step common to all sign-in/link paths, so pick
+// the values back up here with a direct query.
     databaseHooks: {
       account: {
         create: { after: persistGithubProfile },

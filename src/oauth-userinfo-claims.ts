@@ -36,6 +36,10 @@ function claimsObject(value: unknown): Record<string, unknown> | null {
   }
 }
 
+function isAllowedClaim(claim: string, allowed: Set<string>): boolean {
+  return !CLAIM_SCOPE[claim] || allowed.has(CLAIM_SCOPE[claim]);
+}
+
 export function permittedUserInfoClaims(
   value: unknown,
   scopes: readonly string[]
@@ -45,7 +49,7 @@ export function permittedUserInfoClaims(
   const allowed = new Set(scopes);
   return Object.fromEntries(
     Object.keys(requested)
-      .filter((claim) => !CLAIM_SCOPE[claim] || allowed.has(CLAIM_SCOPE[claim]))
+      .filter((claim) => isAllowedClaim(claim, allowed))
       .map((claim) => [claim, null])
   );
 }
@@ -68,8 +72,8 @@ export function filterUserInfoResponse(
 ): Record<string, unknown> {
   const allowed = new Set(scopes);
   return Object.fromEntries(
-    Object.entries(claims).filter(
-      ([claim]) => !CLAIM_SCOPE[claim] || allowed.has(CLAIM_SCOPE[claim])
+    Object.entries(claims).filter(([claim]) =>
+      isAllowedClaim(claim, allowed)
     )
   );
 }

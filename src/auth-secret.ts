@@ -1,5 +1,7 @@
 // Better Auth accepts this published fallback outside production mode. Never
 // allow an unconfigured Worker to use it for signed OAuth state or sessions.
+import type { Env } from "./types";
+
 const BETTER_AUTH_DEFAULT_SECRET = "better-auth-secret-12345678901234567890";
 const EXAMPLE_SECRET = "replace-with-openssl-rand-base64-32";
 
@@ -42,4 +44,32 @@ export function requireBetterAuthSecret(value: unknown): string {
   }
 
   return value;
+}
+
+// Worker bindings are not available through Better Auth's process env parser.
+// Every configured value is strength-validated, including rotation keyring
+// entries, so a weak replacement cannot slip in beside a strong legacy secret.
+export function getAuthSecretOptions(
+  env: Pick<Env, "BETTER_AUTH_SECRET" | "BETTER_AUTH_SECRETS">
+) {
+  const legacySecret = env.BETTER_AUTH_SECRET;
+  const keyring = env.BETTER_AUTH_SECRETS;
+  if (!keyring) {
+    if (!legacySecret) throw new Error("A Better Auth secret is required");
+    return { secret: legacySecret };
+  }
+
+  const seen = new Set<number>();
+  const secrets = keyring.split(",").map((entry) => {
+    const match = /^([0-9]+):(.+)$/.exec(entry.trim());
+    if (!match) throw new Error("Invalid BETTER_AUTH_SECRETS entry");
+    const version = Number(match[1]);
+    const value = requireBetterAuthSecret(match[2].trim());
+    if (!Number.isSafeInteger(version) || seen.has(version)) {
+      throw new Error("Invalid BETTER_AUTH_SECRETS version or value");
+    }
+    seen.add(version);
+    return { version, value };
+  });
+  return { secret: legacySecret, secrets };
 }

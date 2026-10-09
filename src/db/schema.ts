@@ -19,16 +19,10 @@ export const user = sqliteTable("user", {
   image: text("image"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
-  // Linked GitHub identity, refreshed on every GitHub sign-in. githubOrgs is
-  // a JSON-encoded array of lowercase org logins where membership state is
-  // "active", fetched with the read:org scope so private memberships are
-  // included — used downstream (extensions/api repos) to verify developer
-  // profile claims. Null until the user completes a GitHub login after this
-  // scope was added. githubOrgsVerifiedAt is updated only after a successful
-  // membership fetch; a failed fetch preserves both the list and timestamp
-  // only for the same GitHub ID, and clears both when that identity changes.
-  // Provider ID is immutable. Login evidence expires independently of orgs;
-  // legacy rows stay unverified until a successful GitHub authentication.
+  // GitHub identity snapshot: lowercase active-membership org logins
+  // (read:org scope, includes private memberships). Null until first GitHub
+  // login; a failed fetch preserves prior evidence for the same GitHub ID
+  // and clears it on identity change. Login evidence expires independently.
   githubId: text("githubId"),
   githubLoginVerifiedAt: text("githubLoginVerifiedAt"),
   githubLogin: text("githubLogin"),
