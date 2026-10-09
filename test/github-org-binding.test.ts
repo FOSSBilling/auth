@@ -50,6 +50,11 @@ async function fixture(previousId: string | null = "100") {
     "./auth-secret": { requireBetterAuthSecret: (value: unknown) => value },
     "./account-binding": {
       cleanupFailedAccountCreation: (adapter: unknown) => adapter
+    },
+    "./auth-secrets": {
+      getAuthSecretOptions: (env: Record<string, unknown>) => ({
+        secret: env.BETTER_AUTH_SECRET
+      })
     }
   };
   const exports: Record<string, any> = {};

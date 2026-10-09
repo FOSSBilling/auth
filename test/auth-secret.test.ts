@@ -9,11 +9,11 @@ const config = JSON.parse(
 ) as { vars: { NODE_ENV?: string } };
 
 test("auth creation validates the Worker binding before Better Auth receives it", () => {
+  assert.match(source, /requireBetterAuthSecret\(env\.BETTER_AUTH_SECRET\)/);
   assert.match(
     source,
-    /const secret = requireBetterAuthSecret\(env\.BETTER_AUTH_SECRET\)/
+    /getAuthSecretOptions\(\{\s*BETTER_AUTH_SECRET: secret,/
   );
-  assert.match(source, /secret,\s*disabledPaths:/);
   assert.equal(config.vars.NODE_ENV, "production");
 });
 

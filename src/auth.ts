@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import { createGithubProfileStaging } from "./github";
 import { cleanupFailedAccountCreation } from "./account-binding";
+import { getAuthSecretOptions } from "./auth-secrets";
 import {
   githubClaims,
   getGithubOrgsMaxAgeMs,
@@ -58,7 +59,11 @@ type BackgroundTaskContext = {
 };
 
 export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
-  const secret = requireBetterAuthSecret(env.BETTER_AUTH_SECRET);
+  // A configured legacy secret is still strength-validated; it becomes
+  // optional only once a versioned keyring carries rotation state.
+  const secret = env.BETTER_AUTH_SECRET
+    ? requireBetterAuthSecret(env.BETTER_AUTH_SECRET)
+    : undefined;
   const { getGithubUserInfo, consumeGithubProfile, clearGithubProfileStaging } =
     createGithubProfileStaging();
   const baseURL = getBaseUrl(env);
@@ -99,7 +104,10 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
     appName: "FOSSBilling",
     baseURL,
     basePath: "/",
-    secret,
+    ...getAuthSecretOptions({
+      BETTER_AUTH_SECRET: secret,
+      BETTER_AUTH_SECRETS: env.BETTER_AUTH_SECRETS
+    }),
     disabledPaths: ["/token"],
     advanced: {
       // Cloudflare sets this header from the connecting client; forwarded-for

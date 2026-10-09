@@ -191,14 +191,55 @@ resume traffic. Clearing D1 values alone does not revoke tokens held in old
 exports. Users must sign in again or use “Refresh GitHub access” on the account
 page to obtain fresh credentials; they retain the same local user ID.
 
-This service uses a single encryption secret. To rotate `BETTER_AUTH_SECRET`,
-pause account writes, revoke the old GitHub grants, and run the same UPDATE from
-migration 0010 against the active D1 database before replacing the secret and
-resuming traffic. The migration runner will not rerun an already-applied
-migration. Do not leave old ciphertext in place: the new secret cannot decrypt
-it. Expect users to sign in again, since secret rotation also invalidates
-secret-protected cookies. Do not rotate the secret back to recover credentials;
-fresh sign-in/re-link writes encrypted tokens under the new secret.
+`BETTER_AUTH_SECRET` also encrypts persisted JWT signing keys in `jwks`. Never
+replace it on its own: an existing key would still be selected for signing but
+could not be decrypted. Rotate the secret and signing key together:
+
+1. Pause OAuth issuance and account writes. Save the current
+   `BETTER_AUTH_SECRET` securely as the legacy secret, and prepare a fresh random
+   secret. Do not remove the legacy secret yet.
+2. Revoke old GitHub grants and run the UPDATE from migration 0010 against the
+   active D1 database. The migration runner will not rerun an already-applied
+   migration. Check for resources pinned to a signing key:
+
+   ```sql
+   SELECT id, signingKeyId FROM oauthResource WHERE signingKeyId IS NOT NULL;
+   ```
+
+   If this returns rows, reassign their signing keys as part of a separate
+   planned resource-key rotation before proceeding. Expiring a pinned key makes
+   issuance for that resource fail.
+
+3. Keep `BETTER_AUTH_SECRET` set to the legacy value and configure the Worker
+   secret `BETTER_AUTH_SECRETS` as `1:<new-secret>,0:<legacy-secret>` (use the
+   next unused version on later rotations). Deploy and confirm JWT issuance
+   succeeds. The first version encrypts new data; the legacy secret still
+   decrypts existing unversioned JWKS ciphertext.
+4. With issuance still paused, expire current signing keys in D1:
+
+   ```sql
+   UPDATE jwks
+   SET expiresAt = (unixepoch('now') * 1000) - 1000
+   WHERE expiresAt IS NULL OR expiresAt > unixepoch('now') * 1000;
+   ```
+
+   Request a new signed token and confirm it uses a new `kid`. Check that
+   `/.well-known/jwks.json` contains both the old and new public keys before
+   resuming traffic. Expired keys remain published for the JWT plugin's default
+   30-day grace period, so existing tokens can still be verified. This service
+   issues access and ID tokens for at most one hour.
+
+5. After the new key is signing and all legacy encrypted credentials and
+   short-lived replay data have expired or been cleared, remove the old
+   `BETTER_AUTH_SECRET` binding and its old version from `BETTER_AUTH_SECRETS`.
+   Keep the current version in `BETTER_AUTH_SECRETS`. Confirm issuance and JWKS
+   again. Users should sign in again because old secret-protected cookies no
+   longer verify. Fresh sign-in or re-link writes GitHub tokens under the new
+   secret.
+
+Keep old public keys in D1 through the token-validity and JWKS cache window;
+remove expired rows only after that window. Never remove an old secret while
+live signing keys or other encrypted rows still require it.
 
 ## OAuth Provider Shape
 
