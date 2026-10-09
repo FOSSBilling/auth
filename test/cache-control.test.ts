@@ -21,11 +21,13 @@ globals.cacheHeaderTestAuth = {
   clearGithubProfileStaging: () => {
     cleanupCalls++;
   },
-  handler: async (request) =>
+  handler: async (request: Request) =>
     request.url.includes("/callback/github")
       ? new Response("link rejected", { status: 403 })
       : Response.json(
-          { issuer: "https://auth.example.com" },
+          new URL(request.url).pathname.startsWith("/list-sessions")
+            ? [{ token: "database-token", ipAddress: "192.0.2.1" }]
+            : { issuer: "https://auth.example.com" },
           { headers: { "cache-control": "public, max-age=300" } }
         )
 };
@@ -123,6 +125,17 @@ test("public JSON responses keep their existing cache policy", async () => {
   });
 });
 
+test("rejected GitHub callbacks clear request profile staging", async () => {
+  const before = cleanupCalls;
+  const response = await app.fetch(
+    new Request("https://auth.example.com/callback/github"),
+    env,
+    ctx
+  );
+  assert.equal(response.status, 403);
+  assert.equal(cleanupCalls, before + 1);
+});
+
 test("auth passthrough is not method-restricted", async () => {
   // PATCH/DELETE on /oauth2/* (client management) must reach better-auth's
   // own 405/JSON handling, not Hono's 404 text. A 404 text body for an API
@@ -198,13 +211,32 @@ test("non-empty redirects keep their body headers", async () => {
   }
 });
 
-test("rejected GitHub callbacks clear request profile staging", async () => {
-  const before = cleanupCalls;
-  const response = await app.fetch(
-    new Request("https://auth.example.com/callback/github"),
-    env,
-    ctx
-  );
-  assert.equal(response.status, 403);
-  assert.equal(cleanupCalls, before + 1);
+test("session inventory JSON forbids storage across route forms and methods", async () => {
+  for (const [path, method] of [
+    ["/list-sessions", "GET"],
+    ["/list-sessions/", "GET"],
+    ["/list-sessions?source=account", "GET"],
+    ["/list-sessions", "HEAD"]
+  ]) {
+    const response = await app.fetch(
+      new Request(`https://auth.example.com${path}`, { method }),
+      env,
+      ctx
+    );
+    assert.equal(response.status, 200, path);
+    assert.equal(
+      response.headers.get("cache-control"),
+      "no-store, private, max-age=0",
+      path
+    );
+    assert.equal(response.headers.get("pragma"), "no-cache", path);
+    assert.equal(response.headers.get("expires"), "0", path);
+    if (method === "HEAD") {
+      assert.equal(await response.text(), "");
+    } else {
+      assert.deepEqual(await response.json(), [
+        { token: "database-token", ipAddress: "192.0.2.1" }
+      ]);
+    }
+  }
 });

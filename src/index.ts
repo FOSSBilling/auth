@@ -379,6 +379,14 @@ app.all("/link-social", handleAuth);
 app.all("/callback/github", handleAuth);
 app.all("/sign-out", handleAuth);
 app.all("/get-session", handleAuth);
+// Session inventory carries credential-adjacent metadata. Keep it out of
+// shared caches regardless of the upstream cache policy.
+app.use("/list-sessions", async (c, next) => {
+  await next();
+  c.header("cache-control", "no-store, private, max-age=0");
+  c.header("pragma", "no-cache");
+  c.header("expires", "0");
+});
 app.all("/list-sessions", handleAuth);
 app.all("/oauth2/authorize", handleOAuthAuthorize);
 app.post("/oauth2/consent", handleOAuthConsent);
