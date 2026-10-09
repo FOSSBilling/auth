@@ -188,8 +188,8 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
       }
     },
     // getGithubUserInfo stashes login/orgs keyed by GitHub account id;
-// the account row is the step common to all sign-in/link paths, so pick
-// the values back up here with a direct query.
+    // the account row is the step common to all sign-in/link paths, so pick
+    // the values back up here with a direct query.
     databaseHooks: {
       account: {
         create: { after: persistGithubProfile },

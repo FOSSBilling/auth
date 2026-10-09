@@ -72,8 +72,6 @@ export function filterUserInfoResponse(
 ): Record<string, unknown> {
   const allowed = new Set(scopes);
   return Object.fromEntries(
-    Object.entries(claims).filter(([claim]) =>
-      isAllowedClaim(claim, allowed)
-    )
+    Object.entries(claims).filter(([claim]) => isAllowedClaim(claim, allowed))
   );
 }
