@@ -2,8 +2,7 @@
 // has expired. Refresh tokens live 30 days (refreshTokenExpiresIn in
 // auth.ts), so a tombstone older than that can no longer block a live
 // rotation. Delete in batches to bound each D1 statement.
-export const REFRESH_LINEAGE_TOMBSTONE_RETENTION_MS =
-  30 * 24 * 60 * 60 * 1000;
+export const REFRESH_LINEAGE_TOMBSTONE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const BATCH_SIZE = 500;
 
