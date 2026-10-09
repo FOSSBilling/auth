@@ -37,6 +37,11 @@ function fixture() {
   sql.exec(`CREATE TABLE oauthClientAssertion (
     id TEXT PRIMARY KEY, expiresAt INTEGER NOT NULL
   )`);
+  sql.exec(`CREATE TABLE oauthRefreshLineageTombstone (
+    clientId TEXT NOT NULL, userId TEXT NOT NULL,
+    authorizationCodeId TEXT NOT NULL, invalidatedAt INTEGER NOT NULL,
+    PRIMARY KEY (clientId, userId, authorizationCodeId)
+  )`);
   sql.exec(migration);
   // Run the production D1 statement against SQLite, using the same millisecond
   // timestamps as the application's Drizzle schema. No cleanup SQL is mocked.
@@ -100,6 +105,33 @@ test("cron reclaims abandoned codes without traffic, preserving all live state",
     assert.equal(
       sql.prepare("SELECT count(*) AS n FROM verification").get()?.n,
       0
+    );
+    // Tombstones older than the refresh-token window are reclaimed by the
+    // same schedule; fresh ones keep fencing deleted lineages. Anchored to
+    // wall-clock time, which is what the scheduled cleanup compares against.
+    const wallClock = Date.now();
+    sql
+      .prepare(
+        "INSERT INTO oauthRefreshLineageTombstone VALUES (?, ?, ?, ?)"
+      )
+      .run(
+        "client-a",
+        "user-a",
+        "old-code",
+        wallClock - 31 * 24 * 60 * 60 * 1000
+      );
+    sql
+      .prepare(
+        "INSERT INTO oauthRefreshLineageTombstone VALUES (?, ?, ?, ?)"
+      )
+      .run("client-a", "user-a", "fresh-code", wallClock);
+    await worker.scheduled({ ...controller, scheduledTime: now + 600001 }, env);
+    assert.deepEqual(
+      sql
+        .prepare("SELECT authorizationCodeId FROM oauthRefreshLineageTombstone")
+        .all()
+        .map((r) => r.authorizationCodeId),
+      ["fresh-code"]
     );
     const plan = sql
       .prepare(

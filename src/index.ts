@@ -9,6 +9,7 @@ import {
   OPAQUE_ACCESS_TOKEN_PREFIX
 } from "./oauth-userinfo-claims";
 import { deleteExpiredClientAssertions } from "./oauth-assertion-cleanup";
+import { deleteExpiredRefreshLineageTombstones } from "./refresh-lineage-cleanup";
 import type { AppSession, Env } from "./types";
 import { accountPage, consentPage, errorPage, signInPage } from "./views";
 
@@ -413,5 +414,6 @@ export default Object.assign(app, {
       .bind(Date.now() - 10 * 60 * 1000)
       .run();
     await deleteExpiredClientAssertions(env.AUTH_DB);
+    await deleteExpiredRefreshLineageTombstones(env.AUTH_DB);
   }
 });
