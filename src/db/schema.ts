@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex
@@ -211,6 +212,23 @@ export const oauthRefreshToken = sqliteTable(
     index("oauthRefreshToken_authorizationCodeId_idx").on(
       table.authorizationCodeId
     )
+  ]
+);
+
+// A deleted refresh lineage cannot be recreated by an in-flight rotation.
+// The database triggers in migration 0017 enforce this at insert time.
+export const oauthRefreshLineageTombstone = sqliteTable(
+  "oauthRefreshLineageTombstone",
+  {
+    clientId: text("clientId").notNull(),
+    userId: text("userId").notNull(),
+    authorizationCodeId: text("authorizationCodeId").notNull(),
+    invalidatedAt: timestamp("invalidatedAt").notNull()
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.clientId, table.userId, table.authorizationCodeId]
+    })
   ]
 );
 
