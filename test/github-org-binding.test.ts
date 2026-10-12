@@ -18,21 +18,10 @@ const compiled = ts.transpileModule(
 ).outputText;
 const oldTime = new Date(Date.now() - 60000).toISOString();
 
-async function fixture(previousId: string | null = "100") {
-  const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec(`CREATE TABLE user (
-    id text PRIMARY KEY, githubId text, githubLogin text,
-    githubLoginVerifiedAt text, githubOrgs text, githubOrgsVerifiedAt text
-  )`);
-  sqlite
-    .prepare("INSERT INTO user VALUES (?, ?, ?, ?, ?, ?)")
-    .run("owner", previousId, "old-login", oldTime, '["old-org"]', oldTime);
-  const db = drizzle(async (query, params, method) => {
-    assert.equal(method, "run", "hook writes using a single SQL statement");
-    sqlite.prepare(query).run(...params);
-    return { rows: [] };
-  });
-  const modules: Record<string, unknown> = {
+// Module substitutions for the sandboxed auth.ts transpile. Tests that only
+// exercise configuration (no persistence) pass a throwaway database.
+function sandboxModules(db: unknown): Record<string, unknown> {
+  return {
     "better-auth/minimal": { betterAuth: (options: unknown) => options },
     "better-auth/plugins": { jwt: () => ({}) },
     "better-auth/adapters/drizzle": { drizzleAdapter: () => ({}) },
@@ -58,6 +47,12 @@ async function fixture(previousId: string | null = "100") {
     },
     "cloudflare:workers": { waitUntil: () => {} }
   };
+}
+
+// Each invocation runs the module fresh, so module-level state (such as the
+// getAuth cache) starts clean.
+function runAuthModule(db: unknown): Record<string, any> {
+  const modules = sandboxModules(db);
   const exports: Record<string, any> = {};
   runInNewContext(compiled, {
     exports,
@@ -68,7 +63,24 @@ async function fixture(previousId: string | null = "100") {
     URL,
     Date
   });
-  const auth = exports.createAuth({});
+  return exports;
+}
+
+async function fixture(previousId: string | null = "100") {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec(`CREATE TABLE user (
+    id text PRIMARY KEY, githubId text, githubLogin text,
+    githubLoginVerifiedAt text, githubOrgs text, githubOrgsVerifiedAt text
+  )`);
+  sqlite
+    .prepare("INSERT INTO user VALUES (?, ?, ?, ?, ?, ?)")
+    .run("owner", previousId, "old-login", oldTime, '["old-org"]', oldTime);
+  const db = drizzle(async (query, params, method) => {
+    assert.equal(method, "run", "hook writes using a single SQL statement");
+    sqlite.prepare(query).run(...params);
+    return { rows: [] };
+  });
+  const auth = runAuthModule(db).createAuth({});
   const hooks = auth.databaseHooks.account;
   assert.equal(hooks.create.after, hooks.update.after);
   return {
@@ -194,6 +206,36 @@ for (const orgs of [[], ["new-org"]]) {
     }
   });
 }
+
+test("getAuth caches per isolate and reinstantiates when config or the D1 binding changes", () => {
+  const env = {
+    BETTER_AUTH_SECRET: "unit-test-secret",
+    GITHUB_CLIENT_ID: "client-id",
+    GITHUB_CLIENT_SECRET: "client-secret"
+  };
+  const auth = runAuthModule({});
+  assert.equal(
+    auth.getAuth(env),
+    auth.getAuth(env),
+    "unchanged config and binding reuse the instance"
+  );
+  const otherUrl = { ...env, BETTER_AUTH_URL: "https://other.example.test" };
+  assert.equal(
+    auth.getAuth(otherUrl),
+    auth.getAuth(otherUrl),
+    "a changed string setting reuses its own new instance"
+  );
+  assert.notEqual(
+    auth.getAuth(otherUrl),
+    auth.getAuth(env),
+    "different string settings hold different instances"
+  );
+  assert.notEqual(
+    auth.getAuth({ ...env, AUTH_DB: {} }),
+    auth.getAuth({ ...env, AUTH_DB: {} }),
+    "an identically-configured but different D1 binding reinstantiates"
+  );
+});
 
 test("migration invalidates unbound evidence without changing identity or login", async () => {
   const f = await fixture();

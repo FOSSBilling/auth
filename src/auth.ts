@@ -285,11 +285,14 @@ export function createAuth(env: Env) {
 export type Auth = ReturnType<typeof createAuth>;
 
 // Constructing the instance validates options and builds the adapter and
-// plugin pipeline — a few ms of CPU per construction (measured) — from the
-// env values below alone. Cache one instance per isolate instead of paying
-// that on every request. Secrets and vars only change with a new deployment,
-// which starts a fresh isolate; the key comparison covers local dev reloads.
-let cachedAuth: { key: string; auth: Auth } | null = null;
+// plugin pipeline — a few ms of CPU per construction (measured). Cache one
+// instance per isolate instead of paying that on every request. Secrets and
+// vars only change with a new deployment, but Cloudflare may reuse isolates
+// across binding-only changes, and the Drizzle adapter closes over the
+// AUTH_DB binding — so the binding's object identity invalidates the cache
+// too, keeping the HTTP path and the scheduled handler (which reads
+// env.AUTH_DB directly) on the same database.
+let cachedAuth: { key: string; auth: Auth; db: D1Database } | null = null;
 
 export function getAuth(env: Env): Auth {
   const key = JSON.stringify([
@@ -301,8 +304,8 @@ export function getAuth(env: Env): Auth {
     env.GITHUB_ORGS_MAX_AGE_SECONDS,
     env.ADMIN_USER_IDS
   ]);
-  if (cachedAuth?.key !== key) {
-    cachedAuth = { key, auth: createAuth(env) };
+  if (!cachedAuth || cachedAuth.key !== key || cachedAuth.db !== env.AUTH_DB) {
+    cachedAuth = { key, auth: createAuth(env), db: env.AUTH_DB };
   }
   return cachedAuth.auth;
 }
