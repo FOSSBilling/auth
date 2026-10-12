@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
-import { createAuth, isTrustedCallbackUrl, type Auth } from "./auth";
+import { getAuth, isTrustedCallbackUrl, type Auth } from "./auth";
+import { runWithGithubProfileStaging } from "./github";
 import { getGithubOrgsMaxAgeMs, hasFreshGithubOrgs } from "./github-claims";
 import {
   filterUserInfoResponse,
@@ -8,8 +9,10 @@ import {
   OAUTH_SCOPES,
   OPAQUE_ACCESS_TOKEN_PREFIX
 } from "./oauth-userinfo-claims";
-import { deleteExpiredClientAssertions } from "./oauth-assertion-cleanup";
-import { deleteExpiredRefreshLineageTombstones } from "./refresh-lineage-cleanup";
+import {
+  deleteExpiredClientAssertions,
+  deleteExpiredRefreshLineageTombstones
+} from "./cleanup";
 import type { AppSession, Env } from "./types";
 import { accountPage, consentPage, errorPage, signInPage } from "./views";
 
@@ -67,10 +70,13 @@ function contentSecurityPolicy(nonce: string): string {
 }
 
 app.use("*", async (c, next) => {
-  c.set("auth", createAuth(c.env, c.executionCtx));
+  c.set("auth", getAuth(c.env));
   const cspNonce = newNonce();
   c.set("cspNonce", cspNonce);
-  await next();
+  // The auth instance is cached per isolate; this scopes the GitHub profile
+  // staging map (resolved through AsyncLocalStorage) to this request so
+  // concurrent requests cannot see each other's pending profiles.
+  await runWithGithubProfileStaging(next);
   // Navigation redirects (e.g. GET /callback/github) come back from
   // better-auth as 302 with a JSON content-type and empty body, which
   // browsers save as a 0-byte file instead of following Location. When
@@ -163,15 +169,20 @@ async function authorizationScopes(
 async function handleOAuthAuthorize(c: Context<HonoEnv>) {
   const request = c.req.raw;
   // The provider reads form fields for POST and URL parameters for GET.
+  // The form body is read once and reused if the claims need rewriting.
+  const isFormPost =
+    request.method === "POST" &&
+    request.headers
+      .get("content-type")
+      ?.toLowerCase()
+      .startsWith("application/x-www-form-urlencoded");
+  const bodyText = isFormPost ? await request.clone().text() : null;
   const parameters =
-    request.method === "POST"
-      ? request.headers
-          .get("content-type")
-          ?.toLowerCase()
-          .startsWith("application/x-www-form-urlencoded")
-        ? new URLSearchParams(await request.clone().text())
-        : new URLSearchParams()
-      : new URL(request.url).searchParams;
+    bodyText !== null
+      ? new URLSearchParams(bodyText)
+      : request.method === "POST"
+        ? new URLSearchParams()
+        : new URL(request.url).searchParams;
   const values = parameters.getAll("claims");
   const scopes = values.length ? await authorizationScopes(c, parameters) : [];
   if (values.some((value) => hasUnscopedUserInfoClaims(value, scopes))) {
@@ -179,7 +190,7 @@ async function handleOAuthAuthorize(c: Context<HonoEnv>) {
     // client's redirect URI and sends the OAuth error back with the state.
     // This cannot issue a code: the provider rejects a non-object claims value.
     if (request.method === "POST") {
-      const body = new URLSearchParams(await request.clone().text());
+      const body = new URLSearchParams(bodyText ?? "");
       body.set("claims", "null");
       const headers = new Headers(request.headers);
       headers.delete("content-length");
@@ -246,7 +257,7 @@ async function handleOAuthUserInfo(c: Context<HonoEnv>) {
   if (!response.ok) return response;
   if (!token) return c.text("Unable to validate UserInfo token", 502);
   // JWT access tokens do not carry individually requested UserInfo claims.
-  if (!token?.startsWith(OPAQUE_ACCESS_TOKEN_PREFIX)) return response;
+  if (!token.startsWith(OPAQUE_ACCESS_TOKEN_PREFIX)) return response;
 
   // The provider stores opaque tokens as unpadded base64url SHA-256 digests.
   const digest = await crypto.subtle.digest(
@@ -404,9 +415,7 @@ app.notFound((c) => c.text("Not found", 404));
 // Run independently of HTTP traffic and propagate failures to Cron monitoring.
 export default Object.assign(app, {
   async scheduled(controller: ScheduledController, env: Env) {
-    await env.AUTH_DB.prepare(
-      'DELETE FROM "verification" WHERE "expiresAt" < ?'
-    )
+    await env.AUTH_DB.prepare("DELETE FROM verification WHERE expiresAt < ?")
       .bind(controller.scheduledTime)
       .run();
     // Longer than every configured Better Auth window (currently <= 60s).

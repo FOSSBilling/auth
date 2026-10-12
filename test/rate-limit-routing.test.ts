@@ -19,7 +19,7 @@ globals.rateLimitRoutingAuth = {
 };
 
 const hooks = registerRouterTestHooks(
-  `export function createAuth() { return globalThis.rateLimitRoutingAuth; }
+  `export function getAuth() { return globalThis.rateLimitRoutingAuth; }
    export function isTrustedCallbackUrl() { return false; }`
 );
 const { default: app } = await import("../src/index.ts");

@@ -15,7 +15,7 @@
     }
   },
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": ["*/10 * * * *"]
   },
   "workers_dev": false,
   "preview_urls": true,

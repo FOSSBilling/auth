@@ -34,7 +34,7 @@ globals.oauthClaimsTestAuth = {
 };
 
 const hooks = registerRouterTestHooks(
-  `export function createAuth() { return globalThis.oauthClaimsTestAuth; }
+  `export function getAuth() { return globalThis.oauthClaimsTestAuth; }
    export function isTrustedCallbackUrl() { return false; }`
 );
 const { default: app } = await import("../src/index.ts");

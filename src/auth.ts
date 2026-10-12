@@ -3,6 +3,7 @@ import type { BetterAuthOptions } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { waitUntil } from "cloudflare:workers";
 import { and, eq, notExists, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
@@ -24,11 +25,11 @@ import { requireBetterAuthSecret } from "./auth-secret";
 
 const PRODUCTION_URL = "https://auth.fossbilling.net";
 
-export function getBaseUrl(env: Env): string {
+function getBaseUrl(env: Env): string {
   return env.BETTER_AUTH_URL ?? PRODUCTION_URL;
 }
 
-export function getTrustedOrigins(env: Env): string[] {
+function getTrustedOrigins(env: Env): string[] {
   const baseURL = getBaseUrl(env);
   return [
     baseURL,
@@ -51,14 +52,7 @@ export function isTrustedCallbackUrl(env: Env, url: string): boolean {
   }
 }
 
-// A structural subset of ExecutionContext, so this doesn't depend on
-// whichever workers-types version generated worker-configuration.d.ts —
-// Hono's own ExecutionContext (c.executionCtx in index.ts) satisfies it.
-type BackgroundTaskContext = {
-  waitUntil(promise: Promise<unknown>): void;
-};
-
-export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
+export function createAuth(env: Env) {
   // A configured legacy secret is still strength-validated; it becomes
   // optional only once a versioned keyring carries rotation state.
   const secret = env.BETTER_AUTH_SECRET
@@ -115,10 +109,10 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
       ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       // Sign-out revokes the session's tokens and can fire back-channel
       // logout calls to clients — waitUntil keeps those from being cut off
-      // once the response is sent.
-      backgroundTasks: executionCtx
-        ? { handler: (promise) => executionCtx.waitUntil(promise) }
-        : undefined
+      // once the response is sent. cloudflare:workers' waitUntil attaches
+      // to whichever request invokes it, so the cached auth instance stays
+      // request-agnostic.
+      backgroundTasks: { handler: waitUntil }
     },
     database: (options: BetterAuthOptions) =>
       cleanupFailedAccountCreation(
@@ -289,3 +283,29 @@ export function createAuth(env: Env, executionCtx?: BackgroundTaskContext) {
 }
 
 export type Auth = ReturnType<typeof createAuth>;
+
+// Constructing the instance validates options and builds the adapter and
+// plugin pipeline — a few ms of CPU per construction (measured). Cache one
+// instance per isolate instead of paying that on every request. Secrets and
+// vars only change with a new deployment, but Cloudflare may reuse isolates
+// across binding-only changes, and the Drizzle adapter closes over the
+// AUTH_DB binding — so the binding's object identity invalidates the cache
+// too, keeping the HTTP path and the scheduled handler (which reads
+// env.AUTH_DB directly) on the same database.
+let cachedAuth: { key: string; auth: Auth; db: D1Database } | null = null;
+
+export function getAuth(env: Env): Auth {
+  const key = JSON.stringify([
+    env.BETTER_AUTH_URL,
+    env.BETTER_AUTH_SECRET,
+    env.BETTER_AUTH_SECRETS,
+    env.GITHUB_CLIENT_ID,
+    env.GITHUB_CLIENT_SECRET,
+    env.GITHUB_ORGS_MAX_AGE_SECONDS,
+    env.ADMIN_USER_IDS
+  ]);
+  if (!cachedAuth || cachedAuth.key !== key || cachedAuth.db !== env.AUTH_DB) {
+    cachedAuth = { key, auth: createAuth(env), db: env.AUTH_DB };
+  }
+  return cachedAuth.auth;
+}

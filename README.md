@@ -43,21 +43,6 @@ npm run db:generate -- --name my_change
 npm run db:check
 ```
 
-Before applying migration `0015_strong_forge` to an existing D1
-database, check for provider identities already linked to more than one user:
-
-```sql
-SELECT providerId, accountId, COUNT(*) AS bindings
-FROM account
-GROUP BY providerId, accountId
-HAVING COUNT(*) > 1;
-```
-
-If this returns rows, investigate each binding and its dependent sessions and
-tokens, then reconcile the users before applying the migration. The unique
-index deliberately fails while duplicates remain; it does not choose an
-account owner or delete identity data automatically.
-
 Start the Worker:
 
 ```bash
@@ -100,9 +85,8 @@ npx wrangler secret put ADMIN_USER_IDS
 allowed to manage OAuth clients (create/read/update/delete/list/rotate and configure
 client-credentials scopes). Provision each ID deliberately after confirming the
 intended person's GitHub identity; the local user ID is shown on `/account`.
-Email addresses and email verification do not grant this role. `ADMIN_EMAILS` is
-no longer used: migrate existing administrators explicitly before deploying this
-change. An absent or empty `ADMIN_USER_IDS` denies all client administration.
+Email addresses and email verification do not grant this role. An absent or empty
+`ADMIN_USER_IDS` denies all client administration.
 
 Client administration also requires a session created less than 15 minutes ago.
 Sliding session renewal does not extend this window. Sign out and sign in again
@@ -134,8 +118,7 @@ membership lookup may be used in the custom `github_orgs` claim. It defaults to 
 present; consumers must reject missing or expired organization evidence. A transient
 GitHub failure preserves the last successful list and its original expiry only for
 the same immutable GitHub account. Switching accounts without a successful lookup
-clears organization evidence. Migration `0011` clears existing snapshots whose
-source account cannot be established; a successful GitHub sign-in restores them.
+clears organization evidence.
 
 `github_id` is the immutable GitHub provider account ID (a decimal string) and is
 the external identity key. `github_login` is display metadata, never an
@@ -143,8 +126,6 @@ authorization key. It is omitted until GitHub authentication verifies it, and
 expires after `GITHUB_ORGS_MAX_AGE_SECONDS`, independently of organization
 lookup success. Consumers must enforce `github_login_expires_at` even if the
 containing token is still valid; reauthenticate with GitHub to refresh it.
-Migration 0009 leaves existing identity evidence null rather than treating
-legacy handles as freshly verified. Apply it before deploying this code.
 
 OAuth clients must request the dedicated `github` scope to receive the linked GitHub
 claims (`github_id`, `github_login`, `github_login_expires_at`, `github_orgs`, and
@@ -179,17 +160,6 @@ GitHub access and refresh tokens are encrypted by Better Auth using
 `BETTER_AUTH_SECRET` before being stored in D1. Keep that secret separate from
 database exports. GitHub does not issue OIDC ID tokens in this flow; Better Auth's
 option does not encrypt the `idToken` column.
-
-For the first encrypted deployment, pause sign-in/link callbacks and other
-account writes during the rollout. Revoke existing GitHub OAuth grants (users can
-revoke this application under GitHub Settings → Applications) and handle any
-retained exports containing old tokens as sensitive credentials. Migration
-`0010_clear_unencrypted_github_tokens.sql` clears GitHub token and expiry columns,
-including dormant accounts, while preserving users, sessions and stable GitHub
-account bindings. Apply it before deploying the encryption-enabled Worker, then
-resume traffic. Clearing D1 values alone does not revoke tokens held in old
-exports. Users must sign in again or use “Refresh GitHub access” on the account
-page to obtain fresh credentials; they retain the same local user ID.
 
 `BETTER_AUTH_SECRET` also encrypts persisted JWT signing keys in `jwks`. Never
 replace it on its own: an existing key would still be selected for signing but

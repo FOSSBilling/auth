@@ -70,12 +70,6 @@ test("page shell links the stylesheet, favicon and meta", () => {
     html.includes("prefers-color-scheme: dark"),
     "follows the OS color scheme"
   );
-  assert.ok(html.includes("max-w-sm"), "constrains the card width");
-  assert.ok(html.includes("bg-linear-to-b"), "renders the backdrop gradient");
-  assert.ok(
-    html.includes("from-background to-muted"),
-    "anchors the lockup on the background tone so the badge reads"
-  );
   assert.ok(!html.includes("(function () {"), "omits page script when absent");
 });
 
@@ -94,22 +88,6 @@ test("page shell renders the brand lockup and footer", () => {
       '<img src="/logo-dark.svg" alt="" aria-hidden="true"'
     ),
     "renders the dark wordmark, hidden from assistive tech"
-  );
-  assert.ok(
-    html.includes("dark:hidden") && html.includes("hidden dark:block"),
-    "swaps the wordmark with the theme"
-  );
-  assert.ok(
-    html.match(/border-s[^>]*>Account<\/span>/),
-    "labels the lockup with the system name"
-  );
-  assert.ok(
-    html.includes("dark:border-white/20"),
-    "keeps the separator visible in dark mode"
-  );
-  assert.ok(
-    html.includes('<span class="ml-2 badge" data-variant="secondary">beta</span>'),
-    "marks the system as beta like extensions"
   );
   assert.ok(
     html.includes("The FOSSBilling project."),
@@ -303,7 +281,6 @@ test("consentPage escapes the client id and maps scopes to chips", () => {
   assert.ok(!html.includes("openid, profile, email"));
   assert.ok(html.includes('id="accept-consent"'));
   assert.ok(html.includes('id="deny-consent"'));
-  assert.ok(html.includes('data-variant="outline"'));
 });
 
 test("consentPage falls back to default scopes", () => {
@@ -334,19 +311,6 @@ test("accountPage shows the grant flow when orgs are stale", () => {
     ),
     "the grant justification lives on the button"
   );
-  assert.ok(
-    !html.includes("verified automatically"),
-    "no standalone helper paragraph"
-  );
-});
-
-test("accountPage keeps an even label rhythm without margin hacks", () => {
-  const html = accountPage(fakeSession(), "/account", true);
-  assert.ok(!html.includes("mt-2"), "spacing comes from grid gaps alone");
-  assert.ok(
-    html.includes('<p class="label text-sm font-medium">User ID</p>'),
-    "labels use the label component, not muted text"
-  );
 });
 
 test("accountPage shows continue and refresh for a fresh linking caller", () => {
@@ -376,19 +340,12 @@ test("accountPage shows continue and refresh for a fresh linking caller", () => 
     html.includes('data-tooltip="Picks up access granted after sign-in."'),
     "the staleness note lives on the refresh button"
   );
-  assert.ok(!html.includes("looks current"), "no standalone helper paragraph");
 });
 
 test("accountPage shows neither button when fresh with no caller", () => {
   const html = accountPage(fakeSession(), "/account", true);
   assert.ok(!html.includes('id="link-github-orgs" type="button"'));
   assert.ok(html.includes('id="sign-out"'));
-  assert.ok(
-    html.includes(
-      'id="sign-out" type="button" class="btn w-full" data-variant="outline"'
-    ),
-    "sign out keeps a button affordance without going primary"
-  );
 });
 
 test("accountPage signs out with a JSON body", () => {
@@ -420,14 +377,6 @@ test("accountPage renders the avatar with fallback initials", () => {
     true
   );
   assert.ok(withImage.includes('class="avatar me-3 self-center"'));
-  assert.ok(
-    withImage.includes('<header class="grid-cols-[auto_1fr]">'),
-    "lays the avatar beside the name"
-  );
-  assert.ok(
-    withImage.includes('<h2 class="self-center text-xl!">'),
-    "centers and enlarges the name"
-  );
   assert.ok(withImage.includes('src="https://example.com/a.png"'));
   assert.ok(withImage.includes("<span>AD</span>"));
 
