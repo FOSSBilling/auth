@@ -1,4 +1,5 @@
 import { logger } from "@better-auth/core/env";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { GithubProfile } from "better-auth/social-providers";
 import {
   fitsGithubOrgsBudget,
@@ -11,13 +12,26 @@ import {
 // auth.ts) and persists them as githubLogin/githubOrgs — see db/schema.ts.
 // getUserInfo cannot return these directly: additionalFields `input: false`
 // strips them from OAuth profiles too, so they are stashed here keyed by
-// GitHub id and picked up by auth.ts's databaseHooks. Per-request state so
-// rejected callbacks cannot leak across Worker isolates.
+// GitHub id and picked up by auth.ts's databaseHooks. The pending-profile
+// map is request-scoped (see runWithGithubProfileStaging) so rejected
+// callbacks cannot leak into other requests sharing the cached auth
+// instance within a Worker isolate.
 type GithubProfileEvidence = {
   login: string;
   loginVerifiedAt: string;
   orgs: string[] | null;
 };
+
+// AsyncLocalStorage propagates the store through better-auth's awaits:
+// getGithubUserInfo stashes during the callback and the databaseHooks pick
+// the values back up within the same request's async chain. Callers that
+// never enter the scope (direct createAuth use, e.g. tests) fall back to a
+// per-instance map, matching the pre-ALS per-request construction behavior.
+const staging = new AsyncLocalStorage<Map<string, GithubProfileEvidence>>();
+
+export function runWithGithubProfileStaging<T>(fn: () => T): T {
+  return staging.run(new Map(), fn);
+}
 
 interface GithubEmail {
   email: string;
@@ -129,18 +143,23 @@ async function fetchActiveOrgLogins(
 }
 
 export function createGithubProfileStaging() {
-  const pendingGithubProfiles = new Map<string, GithubProfileEvidence>();
+  const fallback = new Map<string, GithubProfileEvidence>();
+
+  function pendingProfiles(): Map<string, GithubProfileEvidence> {
+    return staging.getStore() ?? fallback;
+  }
 
   function consumeGithubProfile(
     accountId: string
   ): GithubProfileEvidence | undefined {
-    const profile = pendingGithubProfiles.get(accountId);
-    pendingGithubProfiles.delete(accountId);
+    const profiles = pendingProfiles();
+    const profile = profiles.get(accountId);
+    profiles.delete(accountId);
     return profile;
   }
 
   function clearGithubProfileStaging() {
-    pendingGithubProfiles.clear();
+    pendingProfiles().clear();
   }
 
   async function getGithubUserInfo(token: { accessToken?: string }) {
@@ -185,7 +204,7 @@ export function createGithubProfileStaging() {
       }
 
       const githubOrgs = await orgsPending;
-      pendingGithubProfiles.set(String(profile.id), {
+      pendingProfiles().set(String(profile.id), {
         login: profile.login,
         loginVerifiedAt,
         orgs: githubOrgs

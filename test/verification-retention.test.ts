@@ -8,7 +8,7 @@ import type { Env } from "../src/types.ts";
 import { registerRouterTestHooks } from "./_hooks.ts";
 
 const hooks = registerRouterTestHooks(
-  `export function createAuth() { return { handler: async () => new Response("auth"), clearGithubProfileStaging: () => {} }; }
+  `export function getAuth() { return { handler: async () => new Response("auth"), clearGithubProfileStaging: () => {} }; }
    export function isTrustedCallbackUrl() { return false; }`
 );
 const { default: worker } = await import("../src/index.ts");
@@ -209,5 +209,5 @@ test("cleanup failures reject the scheduled event and HTTP routing remains avail
   const config = JSON.parse(
     readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8")
   );
-  assert.deepEqual(config.triggers.crons, ["* * * * *"]);
+  assert.deepEqual(config.triggers.crons, ["*/10 * * * *"]);
 });

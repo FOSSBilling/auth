@@ -55,7 +55,8 @@ async function fixture(previousId: string | null = "100") {
     },
     "./account-binding": {
       cleanupFailedAccountCreation: (adapter: unknown) => adapter
-    }
+    },
+    "cloudflare:workers": { waitUntil: () => {} }
   };
   const exports: Record<string, any> = {};
   runInNewContext(compiled, {

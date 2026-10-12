@@ -44,6 +44,10 @@ const GITHUB_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="
 // Decorative inside alerts that already carry an <h2>, so mark it hidden.
 const ERROR_ICON = CircleAlert.replace("<svg", '<svg aria-hidden="true"');
 
+// Shared by both orgsBlock branches; the page script resolves this alert by
+// id, so the branches must render exactly the same markup.
+const LINK_ERROR_ALERT = `<div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>`;
+
 export function page({
   title,
   body,
@@ -308,13 +312,13 @@ export function accountPage(
   const orgsBlock = !githubOrgsFresh
     ? `<div class="grid gap-2">
          <button id="link-github-orgs" type="button" class="btn w-full" data-tooltip="${escapeHtml("Shares your GitHub organization memberships.")}" data-side="bottom">Grant GitHub Access<span class="sr-only">: shares your GitHub organization memberships</span></button>
-         <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>
+         ${LINK_ERROR_ALERT}
        </div>`
     : callbackURL !== "/account"
       ? `<div class="grid gap-2">
            <a href="${escapeHtml(callbackURL)}" class="btn w-full">Continue</a>
            <button id="link-github-orgs" type="button" class="btn w-full" data-variant="secondary" data-tooltip="${escapeHtml("Picks up access granted after sign-in.")}" data-side="bottom">Refresh GitHub Access<span class="sr-only">: picks up access granted after sign-in</span></button>
-           <div class="alert" data-variant="destructive" id="link-github-orgs-error" hidden>${ERROR_ICON}<h2>GitHub Linking Failed</h2><section></section></div>
+           ${LINK_ERROR_ALERT}
          </div>`
       : "";
 

@@ -2,9 +2,56 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import {
+  deleteExpiredClientAssertions,
   deleteExpiredRefreshLineageTombstones,
   REFRESH_LINEAGE_TOMBSTONE_RETENTION_MS
-} from "../src/refresh-lineage-cleanup.ts";
+} from "../src/cleanup.ts";
+
+function stubDb(sqlite: DatabaseSync) {
+  return {
+    prepare(statement: string) {
+      return {
+        bind(now: number) {
+          return {
+            async run() {
+              const { changes } = sqlite.prepare(statement).run(now);
+              return { meta: { changes } };
+            }
+          };
+        }
+      };
+    }
+  } as unknown as Pick<D1Database, "prepare">;
+}
+
+test("scheduled cleanup removes only expired assertion replay guards across batches", async () => {
+  const sqlite = new DatabaseSync(":memory:");
+  try {
+    sqlite.exec(
+      "CREATE TABLE oauthClientAssertion (id TEXT PRIMARY KEY, expiresAt INTEGER NOT NULL)"
+    );
+    const insert = sqlite.prepare(
+      "INSERT INTO oauthClientAssertion (id, expiresAt) VALUES (?, ?)"
+    );
+    for (let i = 0; i < 750; i++) insert.run(`expired-${i}`, 999);
+    insert.run("at-boundary", 1000);
+    insert.run("live", 1001);
+
+    const db = stubDb(sqlite);
+
+    assert.equal(await deleteExpiredClientAssertions(db, 1000), 751);
+    assert.deepEqual(
+      sqlite
+        .prepare("SELECT id FROM oauthClientAssertion")
+        .all()
+        .map((row) => row.id),
+      ["live"]
+    );
+    assert.equal(await deleteExpiredClientAssertions(db, 1000), 0);
+  } finally {
+    sqlite.close();
+  }
+});
 
 test("scheduled cleanup removes only tombstones older than the refresh-token window across batches", async () => {
   const sqlite = new DatabaseSync(":memory:");
@@ -24,20 +71,7 @@ test("scheduled cleanup removes only tombstones older than the refresh-token win
     insert.run("client-a", "user-a", "at-boundary", cutoff);
     insert.run("client-a", "user-a", "live", cutoff + 1);
 
-    const db = {
-      prepare(sql: string) {
-        return {
-          bind(bound: number) {
-            return {
-              async run() {
-                const { changes } = sqlite.prepare(sql).run(bound);
-                return { meta: { changes } };
-              }
-            };
-          }
-        };
-      }
-    } as unknown as Pick<D1Database, "prepare">;
+    const db = stubDb(sqlite);
 
     assert.equal(await deleteExpiredRefreshLineageTombstones(db, now), 751);
     assert.deepEqual(
