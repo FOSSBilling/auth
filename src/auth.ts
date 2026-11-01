@@ -16,7 +16,8 @@ import {
   GITHUB_SCOPE
 } from "./github-claims";
 import {
-  OAUTH_SCOPES,
+  PROVIDER_SCOPES,
+  EXTENSIONS_M2M_SCOPES,
   OPAQUE_ACCESS_TOKEN_PREFIX
 } from "./oauth-userinfo-claims";
 import type { Env } from "./types";
@@ -218,9 +219,9 @@ export function createAuth(env: Env) {
       oauthProvider({
         loginPage: "/sign-in",
         consentPage: "/consent",
-        scopes: OAUTH_SCOPES,
+        scopes: PROVIDER_SCOPES,
         advertisedMetadata: {
-          scopes_supported: OAUTH_SCOPES,
+          scopes_supported: PROVIDER_SCOPES,
           claims_supported: [
             "sub",
             "iss",
@@ -250,6 +251,26 @@ export function createAuth(env: Env) {
         allowDynamicClientRegistration: false,
         allowUnauthenticatedClientRegistration: false,
         clientPrivileges: ({ user, session }) =>
+          canManageOAuthClients(env, user, session),
+        // Protected resource for the extensions API worker. Seeded into
+        // oauthResource on boot (insert-only; admin edits are preserved).
+        // CI must send resource= to get a JWT (aud = identifier); without it
+        // the grant yields an opaque token instead.
+        resources: [
+          {
+            identifier: "https://api.fossbilling.net",
+            name: "FOSSBilling Extensions API",
+            // Local JWT verifiers learn of revocation only at expiry.
+            accessTokenTtl: 600,
+            allowedScopes: EXTENSIONS_M2M_SCOPES
+          }
+        ],
+        // Explicit, though it matches the plugin default: a client sending
+        // resource= must be linked via oauthClientResource or gets
+        // invalid_target.
+        enforcePerClientResources: true,
+        // Same admin gate as client management.
+        resourcePrivileges: ({ user, session }) =>
           canManageOAuthClients(env, user, session),
         accessTokenExpiresIn: 60 * 60,
         idTokenExpiresIn: 60 * 60,

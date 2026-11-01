@@ -38,6 +38,8 @@ const hooks = registerRouterTestHooks(
    export function isTrustedCallbackUrl() { return false; }`
 );
 const { default: app } = await import("../src/index.ts");
+const { OAUTH_SCOPES, PROVIDER_SCOPES, EXTENSIONS_M2M_SCOPES } =
+  await import("../src/oauth-userinfo-claims.ts");
 hooks.deregister();
 let clientScopes: string[] | null = ["openid", "email"];
 let tokenScopes: string[] = ["openid"];
@@ -65,6 +67,21 @@ const env = {
   }
 } as unknown as Env;
 const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} };
+
+test("provider scope list adds only the M2M extensions scopes", () => {
+  assert.deepEqual(EXTENSIONS_M2M_SCOPES, [
+    "extensions:push",
+    "extensions:publish"
+  ]);
+  assert.deepEqual(PROVIDER_SCOPES, [
+    ...OAUTH_SCOPES,
+    ...EXTENSIONS_M2M_SCOPES
+  ]);
+  assert.ok(
+    !OAUTH_SCOPES.some((scope) => scope.startsWith("extensions:")),
+    "user-facing scope ceiling keeps no M2M scopes"
+  );
+});
 
 test("authorize blocks hidden UserInfo claims in GET and form POST", async () => {
   const claims = JSON.stringify({ userinfo: { email: null } });

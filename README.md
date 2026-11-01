@@ -234,6 +234,41 @@ POST /oauth2/revoke
 
 Dynamic client registration is intentionally disabled. First-party OAuth clients should be created deliberately through an internal/admin process rather than self-service public registration — enforced by `ADMIN_USER_IDS` (see [Production Setup](#production-setup)), since otherwise any GitHub-authenticated user could call the authenticated client-management endpoints.
 
+## Machine-to-machine publishing (extensions API)
+
+The `FOSSBilling/modules` CI publisher fetches tokens with `client_credentials` and pushes to the extensions API worker (`https://api.fossbilling.net`).
+
+Setup: an admin in `ADMIN_USER_IDS` (session under 15 minutes old) creates a confidential client with `POST /oauth2/create-client`, passing `grant_types: ["client_credentials"]` and `token_endpoint_auth_method: "client_secret_basic"`. The response carries `client_id` and `client_secret` (`fba_cs_` prefix); save both. The session endpoints do not accept M2M scopes or resource links, so finish in D1:
+
+```sql
+UPDATE oauthClient
+SET clientCredentialsScopes = '["extensions:push","extensions:publish"]'
+WHERE clientId = '<client_id>';
+INSERT INTO oauthClientResource (id, clientId, resourceId, createdAt)
+VALUES (lower(hex(randomblob(16))), '<client_id>', 'https://api.fossbilling.net', unixepoch('now') * 1000);
+```
+
+Only these two scopes are accepted in `clientCredentialsScopes`; user-delegated scopes (`openid`, `profile`, `email`, `offline_access`) are rejected. A client with no row in `oauthClientResource` gets `invalid_target` when it sends `resource=`.
+
+Token request:
+
+```bash
+curl -u "$CLIENT_ID:$CLIENT_SECRET" https://auth.fossbilling.net/oauth2/token \
+  -d grant_type=client_credentials \
+  -d "scope=extensions:push extensions:publish" \
+  -d resource=https://api.fossbilling.net
+```
+
+`resource=` is required. With it the grant returns a JWT (`aud` is the resource identifier, a bare string); without it the grant returns an opaque token the API cannot verify locally. Tokens carry `iss`, `sub` (= `client_id`), `aud`, `scope`, `iat`/`exp` (10 minutes), and `jti`, and no user or GitHub claims. Request one token per release job; `client_credentials` issues no refresh tokens.
+
+Verification: fetch `/.well-known/oauth-authorization-server` for `issuer` and endpoints and `/.well-known/jwks.json` for keys, caching both and refreshing on unknown `kid`. Check `iss`, exact `aud`, and `exp` (small skew allowed), and enforce `scope` per endpoint. Hardcode only your own origin as the expected `aud`, the two scope names, and the issuer URL; read TTLs, algorithms, and endpoints from the token and discovery so issuer-side changes need no API-repo update.
+
+If local verification is unsuitable, `POST /oauth2/introspect` with client basic auth accepts these tokens (the API client is linked to the audience resource). Cache briefly; introspection sees revocation, JWT verification does not.
+
+Rotate the client secret (`fba_cs_` prefix) with the rotate endpoint. To stop issuance, disable the client or the resource row; existing tokens verify until they expire, so worst-case revocation latency is 10 minutes.
+
+`client_id` to developer mapping and `can_publish` live in the API's database, not here. This service only issues and describes the token.
+
 ## Boundary
 
 Keep this service focused on identity:
