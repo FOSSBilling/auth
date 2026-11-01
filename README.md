@@ -238,7 +238,17 @@ Dynamic client registration is intentionally disabled. First-party OAuth clients
 
 The `FOSSBilling/modules` CI publisher fetches tokens with `client_credentials` and pushes to the extensions API worker (`https://api.fossbilling.net`).
 
-Setup: an admin in `ADMIN_USER_IDS` (session under 15 minutes old) creates a confidential client with `grantTypes: ["client_credentials"]`, a non-`none` `token_endpoint_auth_method`, and `clientCredentialsScopes: ["extensions:push", "extensions:publish"]`. Only these two scopes are accepted there; user-delegated scopes (`openid`, `profile`, `email`, `offline_access`) are rejected. Then link the client to the `https://api.fossbilling.net` resource (admin link endpoint or an `oauthClientResource` row). Unlinked clients get `invalid_target`.
+Setup: an admin in `ADMIN_USER_IDS` (session under 15 minutes old) creates a confidential client with `POST /oauth2/create-client`, passing `grant_types: ["client_credentials"]` and `token_endpoint_auth_method: "client_secret_basic"`. The response carries `client_id` and `client_secret` (`fba_cs_` prefix); save both. The session endpoints do not accept M2M scopes or resource links, so finish in D1:
+
+```sql
+UPDATE oauthClient
+SET clientCredentialsScopes = '["extensions:push","extensions:publish"]'
+WHERE clientId = '<client_id>';
+INSERT INTO oauthClientResource (id, clientId, resourceId, createdAt)
+VALUES (lower(hex(randomblob(16))), '<client_id>', 'https://api.fossbilling.net', unixepoch('now') * 1000);
+```
+
+Only these two scopes are accepted in `clientCredentialsScopes`; user-delegated scopes (`openid`, `profile`, `email`, `offline_access`) are rejected. A client with no row in `oauthClientResource` gets `invalid_target` when it sends `resource=`.
 
 Token request:
 
