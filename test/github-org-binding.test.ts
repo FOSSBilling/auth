@@ -33,6 +33,14 @@ function sandboxModules(db: unknown): Record<string, unknown> {
     "./github-claims": claims,
     "./oauth-userinfo-claims": {
       OAUTH_SCOPES: ["openid", "profile", "email"],
+      EXTENSIONS_M2M_SCOPES: ["extensions:push", "extensions:publish"],
+      PROVIDER_SCOPES: [
+        "openid",
+        "profile",
+        "email",
+        "extensions:push",
+        "extensions:publish"
+      ],
       OPAQUE_ACCESS_TOKEN_PREFIX: "fba_at_"
     },
     "./client-privileges": { canManageOAuthClients: () => false },

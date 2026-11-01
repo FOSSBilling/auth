@@ -11,6 +11,14 @@ export const OAUTH_SCOPES = [
   GITHUB_SCOPE
 ];
 
+// Machine-to-machine scopes for the extensions API (modules CI publisher to
+// api.fossbilling.net). Opaque strings here; their meaning lives in the API.
+export const EXTENSIONS_M2M_SCOPES = ["extensions:push", "extensions:publish"];
+
+// Full provider scope list: user-delegated scopes plus M2M scopes. OAUTH_SCOPES
+// above stays the user-facing set (authorize-path defaults, claims filtering).
+export const PROVIDER_SCOPES = [...OAUTH_SCOPES, ...EXTENSIONS_M2M_SCOPES];
+
 const CLAIM_SCOPE: Record<string, string> = {
   name: "profile",
   picture: "profile",
