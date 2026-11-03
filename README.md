@@ -250,6 +250,22 @@ VALUES (lower(hex(randomblob(16))), '<client_id>', 'https://api.fossbilling.net'
 
 Only these two scopes are accepted in `clientCredentialsScopes`; user-delegated scopes (`openid`, `profile`, `email`, `offline_access`) are rejected. A client with no row in `oauthClientResource` gets `invalid_target` when it sends `resource=`.
 
+Fully manual creation (no session): generate a 32-character `a-zA-Z` client id and secret, matching the format the session endpoint uses. The secret is stored as SHA-256, unpadded base64url, with the `fba_cs_` prefix stripped before hashing; present it with the prefix:
+
+```bash
+RAW=$(python3 -c "import secrets,string; print(''.join(secrets.choice(string.ascii_letters) for _ in range(32)))")
+HASH=$(python3 -c "import hashlib,base64; print(base64.urlsafe_b64encode(hashlib.sha256('$RAW'.encode()).digest()).rstrip(b'=').decode())")
+```
+
+```sql
+INSERT INTO oauthClient (id, clientId, clientSecret, grantTypes, tokenEndpointAuthMethod, clientCredentialsScopes, redirectUris, name, createdAt, updatedAt)
+VALUES (lower(hex(randomblob(16))), '<client_id>', '<hash>', '["client_credentials"]', 'client_secret_basic', '["extensions:push","extensions:publish"]', '[]', '<name>', unixepoch('now') * 1000, unixepoch('now') * 1000);
+INSERT INTO oauthClientResource (id, clientId, resourceId, createdAt)
+VALUES (lower(hex(randomblob(16))), '<client_id>', 'https://api.fossbilling.net', unixepoch('now') * 1000);
+```
+
+`redirectUris` is `NOT NULL`, so pass `'[]'` for a machine client. The presented secret is `fba_cs_<raw>`; without the prefix the token endpoint answers `invalid_client`.
+
 Token request:
 
 ```bash
