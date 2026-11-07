@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { CircleAlert } from "lucide-static";
 import type { AppSession } from "../src/types.ts";
 import {
   accountPage,
@@ -151,7 +152,12 @@ test("signInPage renders a destructive alert for errors", () => {
   const html = signInPage("GitHub sign-in failed. Try again.");
   assert.ok(html.includes('class="alert" data-variant="destructive"'));
   assert.ok(html.includes("GitHub sign-in failed. Try again."));
-  assert.ok(html.includes("lucide-circle-alert"), "uses the Lucide icon");
+  const icon = html.match(/<svg aria-hidden="true"[\s\S]*?<\/svg>/)?.[0];
+  assert.equal(
+    icon?.replace(' aria-hidden="true"', ""),
+    CircleAlert.trim(),
+    "uses the Lucide icon regardless of its canonical CSS class name"
+  );
   assert.ok(html.includes('<svg aria-hidden="true"'));
 });
 
