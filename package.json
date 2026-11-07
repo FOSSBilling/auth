@@ -39,6 +39,7 @@
   "allowScripts": {
     "esbuild": true,
     "fsevents": true,
-    "workerd": true
+    "workerd": true,
+    "@parcel/watcher": true
   }
 }
