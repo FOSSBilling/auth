@@ -28,9 +28,8 @@ const db = new DatabaseSync(":memory:");
 db.exec(
   "CREATE TABLE oauthClient (clientId TEXT PRIMARY KEY, redirectUris TEXT, updatedAt INTEGER)"
 );
-const fixed = [
-  "https://extensions-staging.fossbilling.workers.dev/auth/callback"
-];
+const staging =
+  "https://staging-extensions.fossbilling.workers.dev/auth/callback";
 const old = "https://old-extensions.fossbilling.workers.dev/auth/callback";
 const current =
   "https://current--extensions.fossbilling.workers.dev/auth/callback";
@@ -53,7 +52,7 @@ const env = {
 beforeEach(() => {
   db.exec("DELETE FROM oauthClient");
   const insert = db.prepare("INSERT INTO oauthClient VALUES (?, ?, 0)");
-  insert.run("previews", JSON.stringify([...fixed, old]));
+  insert.run("previews", JSON.stringify([old]));
   insert.run(
     "development",
     JSON.stringify(["http://localhost:4321/auth/callback"])
@@ -102,11 +101,11 @@ function callbacks(clientId = "previews"): string[] {
   return JSON.parse(row.redirectUris as string);
 }
 
-test("trusted workflow atomically replaces only branch callbacks", async () => {
-  const response = await request([current, current], await token());
+test("trusted workflow replaces Preview callbacks without changing other clients", async () => {
+  const response = await request([current, current, staging], await token());
   assert.equal(response.status, 204);
   assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.deepEqual(callbacks().sort(), [...fixed, current].sort());
+  assert.deepEqual(callbacks().sort(), [current, staging].sort());
   assert.deepEqual(callbacks("development"), [
     "http://localhost:4321/auth/callback"
   ]);
@@ -114,7 +113,7 @@ test("trusted workflow atomically replaces only branch callbacks", async () => {
     "https://extensions.fossbilling.org/auth/callback"
   ]);
   assert.equal((await request([], await token())).status, 204);
-  assert.deepEqual(callbacks().sort(), [...fixed].sort());
+  assert.deepEqual(callbacks(), []);
 });
 test("missing or invalid credentials and untrusted workflows cannot write", async () => {
   for (const bearer of [
@@ -127,7 +126,7 @@ test("missing or invalid credentials and untrusted workflows cannot write", asyn
     })
   ]) {
     assert.ok([401, 403].includes((await request([current], bearer)).status));
-    assert.deepEqual(callbacks(), [...fixed, old]);
+    assert.deepEqual(callbacks(), [old]);
   }
 });
 test("valid tokens cannot register callbacks outside the Preview namespace", async () => {
@@ -138,7 +137,7 @@ test("valid tokens cannot register callbacks outside the Preview namespace", asy
     "http://test-extensions.fossbilling.workers.dev/auth/callback"
   ]) {
     assert.equal((await request([uri], await token())).status, 400);
-    assert.deepEqual(callbacks(), [...fixed, old]);
+    assert.deepEqual(callbacks(), [old]);
   }
 });
 test("a missing target client fails closed", async () => {
