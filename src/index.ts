@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { syncPreviewCallbacks } from "./preview-callbacks";
 import { getAuth, isTrustedCallbackUrl, type Auth } from "./auth";
 import { runWithGithubProfileStaging } from "./github";
 import { getGithubOrgsMaxAgeMs, hasFreshGithubOrgs } from "./github-claims";
@@ -408,6 +409,8 @@ app.all("/oauth2/*", (c) =>
 app.all("/.well-known/*", (c) =>
   wellKnownPaths.has(c.req.path) ? handleAuth(c) : c.notFound()
 );
+
+app.put("/integrations/extensions-preview-callbacks", syncPreviewCallbacks);
 
 app.notFound((c) => c.text("Not found", 404));
 

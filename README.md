@@ -296,3 +296,15 @@ Keep this service focused on identity:
 - account security
 
 Do not put extension ownership, package review, marketplace moderation, or product-specific roles in this repository. Those belong in the consuming applications and should reference the central auth user ID.
+
+## Directory Preview callbacks
+
+Set `EXTENSIONS_PREVIEW_CLIENT_ID` to the directory's dedicated preview OAuth client ID.
+The trusted `FOSSBilling/extensions` `preview-auth.yml` workflow on `main` uses
+GitHub Actions OIDC to call `PUT /integrations/extensions-preview-callbacks` with
+an array of deployed Preview callback URLs. The endpoint replaces that client's
+callback list, accepting only `*-extensions.fossbilling.workers.dev` URLs,
+including the named `staging` Preview at `https://staging-extensions.fossbilling.workers.dev`. Local development
+uses a separate client. This endpoint cannot change credentials, scopes or other
+clients.
+Public dynamic client registration remains disabled.
