@@ -34,7 +34,7 @@ const fixed = [
 ];
 const old = "https://old-extensions.fossbilling.workers.dev/auth/callback";
 const current =
-  "https://current-extensions.fossbilling.workers.dev/auth/callback";
+  "https://current--extensions.fossbilling.workers.dev/auth/callback";
 const env = {
   EXTENSIONS_PREVIEW_CLIENT_ID: "development",
   AUTH_DB: {

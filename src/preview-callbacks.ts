@@ -7,7 +7,7 @@ const audience =
 const workflow =
   "FOSSBilling/extensions/.github/workflows/preview-auth.yml@refs/heads/main";
 const callback =
-  /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-extensions\.fossbilling\.workers\.dev\/auth\/callback$/;
+  /^https:\/\/[a-z0-9][a-z0-9-]*-extensions\.fossbilling\.workers\.dev\/auth\/callback$/;
 
 // A deployment integration, not general OAuth client administration. The target
 // client is configured by the auth administrator, never selected by the caller.
