@@ -17,6 +17,7 @@ globalThis.fetch = async (input) => {
 };
 after(() => {
   globalThis.fetch = originalFetch;
+  db.close();
 });
 const hooks = registerRouterTestHooks(`
   export function getAuth() { return {}; }
@@ -64,16 +65,14 @@ beforeEach(() => {
 });
 async function token(overrides = {}) {
   return new SignJWT({
+    iss: "https://token.actions.githubusercontent.com",
+    aud: "https://auth.fossbilling.net/integrations/extensions-preview-callbacks",
     repository_id: "557829655",
     workflow_ref:
       "FOSSBilling/extensions/.github/workflows/preview-auth.yml@refs/heads/main",
     ...overrides
   })
     .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-    .setIssuer("https://token.actions.githubusercontent.com")
-    .setAudience(
-      "https://auth.fossbilling.net/integrations/extensions-preview-callbacks"
-    )
     .setIssuedAt()
     .setExpirationTime("5m")
     .sign(privateKey);
@@ -116,9 +115,13 @@ test("trusted workflow replaces Preview callbacks without changing other clients
   assert.deepEqual(callbacks(), []);
 });
 test("missing or invalid credentials and untrusted workflows cannot write", async () => {
+  const [header, payload, signature] = (await token()).split(".");
+  const badSignature = (signature[0] === "A" ? "B" : "A") + signature.slice(1);
   for (const bearer of [
     undefined,
     "invalid",
+    `${header}.${payload}.${badSignature}`,
+    await token({ aud: "https://other.example.test" }),
     await token({ repository_id: "other" }),
     await token({
       workflow_ref:

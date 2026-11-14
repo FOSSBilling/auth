@@ -5,8 +5,7 @@ import { authorizePreviewCallbacks } from "./github-actions-oidc";
 const callback =
   /^https:\/\/[a-z0-9][a-z0-9-]*-extensions\.fossbilling\.workers\.dev\/auth\/callback$/;
 
-// A deployment integration, not general OAuth client administration. The target
-// client is configured by the auth administrator, never selected by the caller.
+// Only the auth administrator selects which client this workflow can update.
 export async function syncPreviewCallbacks(c: Context<{ Bindings: Env }>) {
   c.header("Cache-Control", "no-store");
   const clientId = c.env.EXTENSIONS_PREVIEW_CLIENT_ID;
@@ -35,25 +34,10 @@ export async function syncPreviewCallbacks(c: Context<{ Bindings: Env }>) {
   ) {
     return c.json({ error: "Invalid callbacks" }, 400);
   }
-  // Preserve explicitly registered callbacks while atomically replacing only
-  // the branch Preview URL namespace.
   const result = await c.env.AUTH_DB.prepare(
-    `
-    UPDATE oauthClient SET redirectUris = (
-      SELECT json_group_array(value) FROM (
-        SELECT value FROM json_each(oauthClient.redirectUris)
-        WHERE value NOT GLOB ?
-        UNION SELECT value FROM json_each(?)
-      )
-    ), updatedAt = ? WHERE clientId = ? RETURNING clientId
-  `
+    "UPDATE oauthClient SET redirectUris = ?, updatedAt = ? WHERE clientId = ? RETURNING clientId"
   )
-    .bind(
-      "https://*-extensions.fossbilling.workers.dev/auth/callback",
-      JSON.stringify([...new Set(body)]),
-      Date.now(),
-      clientId
-    )
+    .bind(JSON.stringify([...new Set(body)]), Date.now(), clientId)
     .first();
   if (!result) return c.json({ error: "Preview client not found" }, 404);
   return c.body(null, 204);
