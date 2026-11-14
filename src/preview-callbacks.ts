@@ -1,11 +1,7 @@
 import type { Context } from "hono";
 import type { Env } from "./types";
-import { verifyGitHubActionsToken } from "./github-actions-oidc";
+import { authorizePreviewCallbacks } from "./github-actions-oidc";
 
-const audience =
-  "https://auth.fossbilling.net/integrations/extensions-preview-callbacks";
-const workflow =
-  "FOSSBilling/extensions/.github/workflows/preview-auth.yml@refs/heads/main";
 const callback =
   /^https:\/\/[a-z0-9][a-z0-9-]*-extensions\.fossbilling\.workers\.dev\/auth\/callback$/;
 
@@ -20,14 +16,7 @@ export async function syncPreviewCallbacks(c: Context<{ Bindings: Env }>) {
   if (!authorization?.startsWith("Bearer "))
     return c.json({ error: "Unauthorized" }, 401);
   try {
-    const claims = await verifyGitHubActionsToken(
-      authorization.slice(7),
-      audience
-    );
-    if (
-      claims.repository_id !== "557829655" ||
-      claims.workflow_ref !== workflow
-    ) {
+    if (!(await authorizePreviewCallbacks(authorization.slice(7)))) {
       return c.json({ error: "Forbidden" }, 403);
     }
   } catch {
