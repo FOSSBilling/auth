@@ -299,10 +299,11 @@ Do not put extension ownership, package review, marketplace moderation, or produ
 
 ## Directory Preview callbacks
 
-Set `EXTENSIONS_PREVIEW_CLIENT_ID` to the directory's development OAuth client ID.
+Set `EXTENSIONS_PREVIEW_CLIENT_ID` to the directory's dedicated preview OAuth client ID.
 The trusted `FOSSBilling/extensions` `preview-auth.yml` workflow on `main` uses
 GitHub Actions OIDC to call `PUT /integrations/extensions-preview-callbacks` with
 an array of deployed branch callback URLs. The endpoint replaces only callbacks
-under `*-extensions.fossbilling.workers.dev`; localhost and fixed staging callbacks
-are preserved. It cannot change client credentials, scopes or other clients.
+under `*-extensions.fossbilling.workers.dev`; the fixed staging callback is
+preserved. Local development uses a separate client, which this endpoint cannot
+modify. It cannot change client credentials, scopes or other clients.
 Public dynamic client registration remains disabled.

@@ -35,8 +35,8 @@ export async function syncPreviewCallbacks(c: Context<{ Bindings: Env }>) {
   ) {
     return c.json({ error: "Invalid callbacks" }, 400);
   }
-  // One atomic update preserves localhost, fixed staging and other explicitly
-  // registered callbacks, while replacing only this Preview URL namespace.
+  // Preserve explicitly registered callbacks while atomically replacing only
+  // the branch Preview URL namespace.
   const result = await c.env.AUTH_DB.prepare(
     `
     UPDATE oauthClient SET redirectUris = (

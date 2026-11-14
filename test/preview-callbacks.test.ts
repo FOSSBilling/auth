@@ -29,14 +29,13 @@ db.exec(
   "CREATE TABLE oauthClient (clientId TEXT PRIMARY KEY, redirectUris TEXT, updatedAt INTEGER)"
 );
 const fixed = [
-  "http://localhost:4321/auth/callback",
   "https://extensions-staging.fossbilling.workers.dev/auth/callback"
 ];
 const old = "https://old-extensions.fossbilling.workers.dev/auth/callback";
 const current =
   "https://current--extensions.fossbilling.workers.dev/auth/callback";
 const env = {
-  EXTENSIONS_PREVIEW_CLIENT_ID: "development",
+  EXTENSIONS_PREVIEW_CLIENT_ID: "previews",
   AUTH_DB: {
     prepare(sql: string) {
       return {
@@ -54,7 +53,11 @@ const env = {
 beforeEach(() => {
   db.exec("DELETE FROM oauthClient");
   const insert = db.prepare("INSERT INTO oauthClient VALUES (?, ?, 0)");
-  insert.run("development", JSON.stringify([...fixed, old]));
+  insert.run("previews", JSON.stringify([...fixed, old]));
+  insert.run(
+    "development",
+    JSON.stringify(["http://localhost:4321/auth/callback"])
+  );
   insert.run(
     "production",
     JSON.stringify(["https://extensions.fossbilling.org/auth/callback"])
@@ -92,7 +95,7 @@ async function request(body: unknown, bearer?: string, bindings = env) {
     bindings
   );
 }
-function callbacks(clientId = "development"): string[] {
+function callbacks(clientId = "previews"): string[] {
   const row = db
     .prepare("SELECT redirectUris FROM oauthClient WHERE clientId = ?")
     .get(clientId)!;
@@ -104,6 +107,9 @@ test("trusted workflow atomically replaces only branch callbacks", async () => {
   assert.equal(response.status, 204);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(callbacks().sort(), [...fixed, current].sort());
+  assert.deepEqual(callbacks("development"), [
+    "http://localhost:4321/auth/callback"
+  ]);
   assert.deepEqual(callbacks("production"), [
     "https://extensions.fossbilling.org/auth/callback"
   ]);
