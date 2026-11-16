@@ -31,7 +31,7 @@
     "@types/node": "26.6.6",
     "basecoat-css": "1.1.0",
     "drizzle-kit": "0.31.11",
-    "lucide-static": "1.70.0",
+    "lucide-static": "1.72.0",
     "prettier": "3.9.10",
     "tailwindcss": "4.3.5",
     "typescript": "6.0.3",
