@@ -1,14 +1,14 @@
 import { bindings, defineConfig, triggers } from "cf/config";
 
-export default defineConfig({
+export default defineConfig(({ isPreview }) => ({
   worker: {
     name: "auth",
-    compatibilityDate: "2026-09-23",
-    compatibilityFlags: ["nodejs_compat"],
+    compatibilityDate: "2026-11-24",
     entrypoint: "src/index.ts",
     workersDev: false,
-    previewUrls: true,
+    previewUrls: false,
     observability: {
+      ...(isPreview && { enabled: true }),
       redactQueryString: true,
       logs: {
         enabled: true,
@@ -16,9 +16,20 @@ export default defineConfig({
       },
       traces: {
         enabled: true
-      }
+      },
+      issues: {
+        enabled: true,
+      },
     },
     triggers: [triggers.scheduled({ schedule: "*/10 * * * *" })],
+    domains: [
+      'fossbilling.net',
+      {
+        hostname: 'auth.fossbilling.foo',
+        production: false,
+        previews: true,
+      },
+    ],
     env: {
       NODE_ENV: bindings.text("production"),
       BETTER_AUTH_URL: bindings.text("https://auth.fossbilling.net"),
@@ -29,4 +40,4 @@ export default defineConfig({
       })
     }
   }
-});
+}));
