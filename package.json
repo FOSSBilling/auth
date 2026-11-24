@@ -5,7 +5,6 @@
   "scripts": {
     "build:css": "tailwindcss -i ./src/styles.css -o ./public/styles.css --minify",
     "build": "npm run build:css",
-    "predev": "npm run build",
     "dev": "cf dev",
     "cf-deploy": "npm run build && cf deploy",
     "cf-preview": "cf previews deploy",
