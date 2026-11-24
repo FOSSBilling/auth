@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { requireBetterAuthSecret } from "../src/auth-secret.ts";
+import config from "../cloudflare.config.ts";
 
 const source = readFileSync(new URL("../src/auth.ts", import.meta.url), "utf8");
-const config = JSON.parse(
-  readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8")
-) as { vars: { NODE_ENV?: string } };
 
 test("auth creation validates the Worker binding before Better Auth receives it", () => {
   assert.match(source, /requireBetterAuthSecret\(env\.BETTER_AUTH_SECRET\)/);
@@ -14,7 +12,7 @@ test("auth creation validates the Worker binding before Better Auth receives it"
     source,
     /getAuthSecretOptions\(\{\s*BETTER_AUTH_SECRET: secret,/
   );
-  assert.equal(config.vars.NODE_ENV, "production");
+  assert.equal(config.worker.env.NODE_ENV.value, "production");
 });
 
 test("missing, weak, and public secrets fail closed in every environment", () => {
