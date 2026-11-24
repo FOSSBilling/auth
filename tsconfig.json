@@ -9,6 +9,6 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "types": ["./worker-configuration.d.ts", "node"]
+    "types": ["./.cloudflare/types", "node"]
   }
 }

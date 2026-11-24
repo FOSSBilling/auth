@@ -2,8 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:best-practices",
-    "schedule:weekly",
-    "security:minimumReleaseAgeNpm",
+    "schedule:daily",
     ":automergeBranch",
     ":automergeDigest",
     ":automergeLinters",
@@ -17,7 +16,14 @@
     ":rebaseStalePrs"
   ],
   "automergeSchedule": ["at any time"],
-  "automergeStrategy": "squash",
   "postUpdateOptions": ["npmDedupe"],
-  "skipInstalls": false
+  "skipInstalls": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/\\\\.github/workflows/.+\\\\.ya?ml$/"],
+      "matchStrings": ["gh extension install (?<depName>[\\\\w.-]+/[\\\\w.-]+) --pin (?<currentValue>\\\\S+)"],
+      "datasourceTemplate": "github-releases"
+    }
+  ]
 }

@@ -6,6 +6,12 @@ import { betterAuth } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import type { Env } from "../src/types.ts";
 import { registerRouterTestHooks } from "./_hooks.ts";
+import config from "../cloudflare.config.ts";
+
+const resolved =
+  typeof config === "function"
+    ? config({ isPreview: false, mode: undefined })
+    : config;
 
 const hooks = registerRouterTestHooks(
   `export function getAuth() { return { handler: async () => new Response("auth"), clearGithubProfileStaging: () => {} }; }
@@ -206,8 +212,12 @@ test("cleanup failures reject the scheduled event and HTTP routing remains avail
   );
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "auth");
-  const config = JSON.parse(
-    readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8")
-  );
-  assert.deepEqual(config.triggers.crons, ["*/10 * * * *"]);
+  assert.deepEqual(resolved.worker.triggers, [
+    { type: "scheduled", schedule: "*/10 * * * *" }
+  ]);
+  const preview =
+    typeof config === "function"
+      ? config({ isPreview: true, mode: undefined })
+      : config;
+  assert.deepEqual(preview.worker.triggers, []);
 });

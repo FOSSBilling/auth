@@ -28,8 +28,8 @@ Set the GitHub OAuth callback URL to:
 http://localhost:8787/callback/github
 ```
 
-Apply migrations to the local D1 database (miniflare creates it from the
-`AUTH_DB` binding in `wrangler.jsonc` — no `wrangler d1 create` needed):
+Apply migrations to the local D1 database (the local D1 simulation is created
+from the `AUTH_DB` binding in `cloudflare.config.ts` — no `cf d1 create` needed):
 
 ```bash
 npm run db:migrate:local
@@ -53,32 +53,35 @@ npm run dev
 `build`). The pages in `src/views.ts` link the compiled CSS at
 `/styles.css`, which is built from `src/styles.css`
 (`@import "tailwindcss"; @import "basecoat-css";`) into `public/styles.css`
-and served as a Worker Static Asset (see `assets` in `wrangler.jsonc`). Run
-`npm run build` manually after editing `src/styles.css` if the dev
-server isn't running. Always deploy with `npm run deploy` (not bare
-`wrangler deploy`) so the `predeploy` hook rebuilds the stylesheet.
+and served as a Worker Static Asset from `public/` (Vite's `publicDir`,
+picked up by `@cloudflare/vite-plugin` in `vite.config.ts`). Run
+`npm run build` manually after editing
+`src/styles.css` if the dev server isn't running. Always deploy with
+`npm run cf-deploy` (not bare `cf deploy`) so the stylesheet is rebuilt
+first — the `cf-deploy` script runs `npm run build` inline because `cf`
+does not run npm `predeploy` hooks.
 
 ## Production Setup
 
-> **Note:** `wrangler.jsonc` intentionally has no `routes` entry. A `routes` block with
-> `custom_domain: true` breaks `wrangler dev` locally (Origin/Host resolution gets
-> corrupted, causing spurious `Invalid origin` errors — see
-> [workers-sdk#14683](https://github.com/cloudflare/workers-sdk/issues/14683)). The
-> `auth.fossbilling.net` custom domain is instead attached to this Worker directly in
-> the Cloudflare dashboard, so `wrangler deploy` (which has no `routes` to sync) won't
-> touch or remove it.
+> **Note:** `cloudflare.config.ts` manages the custom domain via `domains`:
+> `auth.fossbilling.net` serves production traffic, and Preview deployments are
+> served on the `auth.fossbilling.foo` preview hostname (`previewUrls` is off).
+> `workers_dev` is disabled, so the Worker is only reachable on its custom
+> domain.
 
 1. Create a Cloudflare D1 database.
-2. Replace `database_id` in `wrangler.jsonc`.
+2. Replace the database `id` in `cloudflare.config.ts` and in the
+   `db:migrate:local`/`db:migrate:remote` scripts in `package.json` (`cf d1`
+   takes the database UUID, not the binding name).
 3. Set Worker secrets:
 
 ```bash
-# Generate a fresh value and paste it when Wrangler prompts. Do not commit it.
+# Generate a fresh value and paste it when cf prompts. Do not commit it.
 openssl rand -base64 32
-npx wrangler secret put BETTER_AUTH_SECRET
-npx wrangler secret put GITHUB_CLIENT_ID
-npx wrangler secret put GITHUB_CLIENT_SECRET
-npx wrangler secret put ADMIN_USER_IDS
+npx cf workers secrets update BETTER_AUTH_SECRET
+npx cf workers secrets update GITHUB_CLIENT_ID
+npx cf workers secrets update GITHUB_CLIENT_SECRET
+npx cf workers secrets update ADMIN_USER_IDS
 ```
 
 `ADMIN_USER_IDS` is a comma-separated, case-sensitive list of immutable local user IDs
@@ -100,7 +103,7 @@ removing this role does not invalidate previously issued OAuth tokens or clients
 Set `BETTER_AUTH_SECRET` separately for every deployed environment, including
 preview environments. The Worker rejects missing, example, short, and low-diversity
 values before constructing Better Auth; `NODE_ENV` is also set to `production` in
-`wrangler.jsonc`. After deployment, request `/sign-in` in each environment and
+`cloudflare.config.ts`. After deployment, request `/sign-in` in each environment and
 confirm it serves normally. A missing or invalid secret makes the request fail
 instead of allowing Better Auth to use its published fallback key.
 
@@ -145,7 +148,7 @@ npm run db:migrate:remote
 5. Deploy:
 
 ```bash
-npm run deploy
+npm run cf-deploy
 ```
 
 The production GitHub OAuth callback URL should be:
