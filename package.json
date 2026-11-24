@@ -10,12 +10,11 @@
     "cf-deploy": "npm run build && cf deploy",
     "cf-preview": "cf previews deploy",
     "typecheck": "npm run cf-typegen && tsc --noEmit",
-    "cf-typegen": "cf workers types",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate:local": "cf d1 migrations apply 43ce5ec3-5ddd-429b-b9e8-550a80d0edf9 --local",
     "db:migrate:remote": "cf d1 migrations apply 43ce5ec3-5ddd-429b-b9e8-550a80d0edf9",
-    "test": "node --experimental-strip-types --test test/**/*.test.ts",
+    "test": "node --test test/**/*.test.ts",
     "format": "prettier --write \"src/**/*.ts\" \"*.{json,jsonc,md,ts}\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"*.{json,jsonc,md,ts}\""
   },
