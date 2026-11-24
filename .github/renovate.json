@@ -2,8 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:best-practices",
-    "schedule:weekly",
-    "security:minimumReleaseAgeNpm",
+    "schedule:daily",
     ":automergeBranch",
     ":automergeDigest",
     ":automergeLinters",
@@ -12,12 +11,10 @@
     ":automergeRequireAllStatusChecks",
     ":automergeTesters",
     ":automergeTypes",
-    ":maintainLockFilesWeekly",
     ":npm",
     ":rebaseStalePrs"
   ],
   "automergeSchedule": ["at any time"],
-  "automergeStrategy": "squash",
   "postUpdateOptions": ["npmDedupe"],
   "skipInstalls": false,
   "customManagers": [
