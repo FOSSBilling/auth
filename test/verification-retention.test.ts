@@ -8,6 +8,11 @@ import type { Env } from "../src/types.ts";
 import { registerRouterTestHooks } from "./_hooks.ts";
 import config from "../cloudflare.config.ts";
 
+const resolved =
+  typeof config === "function"
+    ? config({ isPreview: false, mode: undefined })
+    : config;
+
 const hooks = registerRouterTestHooks(
   `export function getAuth() { return { handler: async () => new Response("auth"), clearGithubProfileStaging: () => {} }; }
    export function isTrustedCallbackUrl() { return false; }`
@@ -207,7 +212,7 @@ test("cleanup failures reject the scheduled event and HTTP routing remains avail
   );
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "auth");
-  assert.deepEqual(config.worker.triggers, [
+  assert.deepEqual(resolved.worker.triggers, [
     { type: "scheduled", schedule: "*/10 * * * *" }
   ]);
 });

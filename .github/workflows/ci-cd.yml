@@ -2,20 +2,123 @@ name: CI/CD
 
 on:
   push:
-    branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A deleted push can run at the default branch SHA. Keep it out of deployment queues.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.deleted && github.run_id || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  check:
+  validation:
+    name: Validation
+    if: ${{ !github.event.deleted }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.1.0
+      - name: Checkout Repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.1.0
         with:
-          node-version: 26
+          node-version: "26"
           cache: npm
-      - run: npm ci
-      - run: npm run build
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run format:check
+
+      - name: Install Dependencies
+        id: dependencies
+        run: npm ci
+
+      - name: Check Formatting
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: npm run format:check
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: npm run typecheck
+
+      - name: Test
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: npm test
+
+  build:
+    name: Build
+    if: ${{ !github.event.deleted }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build && npx cf build
+
+      - name: Validate Worker Deployment
+        run: npx cf deploy --prebuilt --dry-run --mode production
+
+      - name: Upload Worker Build
+        if: github.repository == 'FOSSBilling/auth' && github.event_name == 'push'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: worker-build
+          overwrite: true
+          path: .cloudflare/output/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  preview:
+    name: Cloudflare Preview
+    needs: [validation, build]
+    if: ${{ !cancelled() && github.repository == 'FOSSBilling/auth' && github.event_name == 'push' && !github.event.deleted && github.ref_type == 'branch' && github.ref != 'refs/heads/main' }}
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@415540b79f2d744d6808670b933a599d4a740ba9 # main
+    with:
+      operation: deploy
+      mode: preview
+      cli: cf
+      build-result: ${{ needs.build.result }}
+      checks-result: ${{ needs.validation.result }}
+      pr-comment: true
+      pr-base-branch: main
+      environment: preview
+      artifact-name: worker-build
+      artifact-path: .cloudflare/output/
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+  deploy:
+    name: Deploy Production
+    needs: [validation, build]
+    if: github.repository == 'FOSSBilling/auth' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@415540b79f2d744d6808670b933a599d4a740ba9 # main
+    with:
+      operation: deploy
+      mode: production
+      cli: cf
+      prebuilt: true
+      environment: production
+      artifact-name: worker-build
+      artifact-path: .cloudflare/output/
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

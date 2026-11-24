@@ -63,13 +63,11 @@ does not run npm `predeploy` hooks.
 
 ## Production Setup
 
-> **Note:** `cloudflare.config.ts` intentionally has no `domains`/fetch-trigger
-> entry. A route with `custom_domain: true` breaks `cf dev` locally (Origin/Host
-> resolution gets corrupted, causing spurious `Invalid origin` errors — see
-> [workers-sdk#14683](https://github.com/cloudflare/workers-sdk/issues/14683)). The
-> `auth.fossbilling.net` custom domain is instead attached to this Worker directly in
-> the Cloudflare dashboard, so `cf deploy` (which has no triggers to sync) won't
-> touch or remove it.
+> **Note:** `cloudflare.config.ts` manages the custom domain via `domains`:
+> `auth.fossbilling.net` serves production traffic, and Preview deployments are
+> served on the `auth.fossbilling.foo` preview hostname (`previewUrls` is off).
+> `workers_dev` is disabled, so the Worker is only reachable on its custom
+> domain.
 
 1. Create a Cloudflare D1 database.
 2. Replace the database `id` in `cloudflare.config.ts` and in the

@@ -18,17 +18,17 @@ export default defineConfig(({ isPreview }) => ({
         enabled: true
       },
       issues: {
-        enabled: true,
-      },
+        enabled: true
+      }
     },
     triggers: [triggers.scheduled({ schedule: "*/10 * * * *" })],
     domains: [
-      'fossbilling.net',
+      "auth.fossbilling.net",
       {
-        hostname: 'auth.fossbilling.foo',
+        hostname: "auth.fossbilling.foo",
         production: false,
-        previews: true,
-      },
+        previews: true
+      }
     ],
     env: {
       NODE_ENV: bindings.text("production"),
