@@ -21,7 +21,11 @@ export default defineConfig(({ isPreview }) => ({
         enabled: true
       }
     },
-    triggers: [triggers.scheduled({ schedule: "*/10 * * * *" })],
+    // Preview uploads from Build Output don't support `triggers`, so the cron
+    // is only attached to non-preview (production) uploads.
+    triggers: isPreview
+      ? []
+      : [triggers.scheduled({ schedule: "*/10 * * * *" })],
     domains: [
       "auth.fossbilling.net",
       {

@@ -215,4 +215,9 @@ test("cleanup failures reject the scheduled event and HTTP routing remains avail
   assert.deepEqual(resolved.worker.triggers, [
     { type: "scheduled", schedule: "*/10 * * * *" }
   ]);
+  const preview =
+    typeof config === "function"
+      ? config({ isPreview: true, mode: undefined })
+      : config;
+  assert.deepEqual(preview.worker.triggers, []);
 });
