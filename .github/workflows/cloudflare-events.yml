@@ -6,32 +6,34 @@ on:
     types: [completed]
   pull_request:
     branches: [main]
-    types: [opened, reopened, synchronize, closed]
+  pull_request_target:
+    branches: [main]
+    types: [closed]
   delete:
 
-permissions:
-  contents: read
-  actions: read
-  pull-requests: write
+permissions: {}
 
 jobs:
   comment:
     if: >-
       github.repository == 'FOSSBilling/auth' &&
-      ((github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push') ||
-       (github.event_name == 'pull_request' && github.event.action != 'closed' &&
-        github.event.pull_request.head.repo.full_name == github.repository))
-    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@415540b79f2d744d6808670b933a599d4a740ba9 # main
+      (github.event.workflow_run.event == 'push' ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.event.repository.id))
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@3cf4789d30ba7624541ce6243af03fa77ba285f3 # FOSSBilling/.workflows#63
     with:
       operation: sync-pr-comment
       build-workflow: ci-cd.yml
       pr-base-branch: main
 
   cleanup:
-    name: Delete Cloudflare Preview
+    name: Delete Branch Preview
     if: >-
       github.repository == 'FOSSBilling/auth' &&
-      ((github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      ((github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.id == github.event.repository.id) ||
        (github.event_name == 'delete' && github.event.ref_type == 'branch'))
     permissions:
       contents: read
@@ -39,10 +41,10 @@ jobs:
     # Share the branch's push CI group so cleanup waits for its preview deployment.
     concurrency:
       group: CI/CD-push-refs/heads/${{ github.event.pull_request.head.ref || github.event.ref }}
-    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@415540b79f2d744d6808670b933a599d4a740ba9 # main
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@3cf4789d30ba7624541ce6243af03fa77ba285f3 # FOSSBilling/.workflows#63
     with:
       operation: delete-preview
-      worker-name: auth
+      worker-name: ${{ github.event.repository.name }}
       environment: preview
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

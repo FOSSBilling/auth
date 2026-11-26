@@ -51,6 +51,8 @@ jobs:
     if: ${{ !github.event.deleted }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CLOUDFLARE_PREVIEW_BUILD: ${{ github.repository == 'FOSSBilling/auth' && github.event_name == 'push' && github.ref_type == 'branch' && github.ref != 'refs/heads/main' }}
 
     steps:
       - name: Checkout Repository
@@ -68,11 +70,16 @@ jobs:
       - name: Build
         run: npm run build && npx cf build
 
+      - name: Validate Preview Build Output
+        if: env.CLOUDFLARE_PREVIEW_BUILD == 'true'
+        run: jq -e '.buildContext.isPreview == true and .buildContext.mode == "production"' .cloudflare/output/v1/config.json
+
       - name: Validate Worker Deployment
+        if: env.CLOUDFLARE_PREVIEW_BUILD == 'false'
         run: npx cf deploy --prebuilt --dry-run --mode production
 
       - name: Upload Worker Build
-        if: github.repository == 'FOSSBilling/auth' && github.event_name == 'push'
+        if: github.repository == 'FOSSBilling/auth' && github.event_name == 'push' && github.ref_type == 'branch'
         uses: actions/upload-artifact@v7.0.2
         with:
           name: worker-build
@@ -90,11 +97,13 @@ jobs:
       contents: read
       actions: read
       pull-requests: write
-    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@415540b79f2d744d6808670b933a599d4a740ba9 # main
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@3cf4789d30ba7624541ce6243af03fa77ba285f3 # FOSSBilling/.workflows#63
     with:
       operation: deploy
       mode: preview
       cli: cf
+      node-version: "26"
+      prebuilt: true
       build-result: ${{ needs.build.result }}
       checks-result: ${{ needs.validation.result }}
       pr-comment: true
@@ -113,11 +122,12 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@415540b79f2d744d6808670b933a599d4a740ba9 # main
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@3cf4789d30ba7624541ce6243af03fa77ba285f3 # FOSSBilling/.workflows#63
     with:
       operation: deploy
       mode: production
       cli: cf
+      node-version: "26"
       prebuilt: true
       environment: production
       artifact-name: worker-build
