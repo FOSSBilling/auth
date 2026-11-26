@@ -97,7 +97,7 @@ jobs:
       contents: read
       actions: read
       pull-requests: write
-    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@b76b70c142bdb15b890d7261451d8aaa12b27351 # FOSSBilling/.workflows#63
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@617cbad9376975256972e9a18b06a6024ce6343c # FOSSBilling/.workflows#63
     with:
       operation: deploy
       mode: preview
@@ -121,7 +121,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@b76b70c142bdb15b890d7261451d8aaa12b27351 # FOSSBilling/.workflows#63
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-workers.yml@617cbad9376975256972e9a18b06a6024ce6343c # FOSSBilling/.workflows#63
     with:
       operation: deploy
       mode: production
