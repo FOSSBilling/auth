@@ -22,11 +22,14 @@ openssl rand -base64 32
 Replace the `BETTER_AUTH_SECRET` placeholder in `.dev.vars` with the generated
 value before starting the Worker. The placeholder is deliberately rejected.
 
-Set the GitHub OAuth callback URL to:
+Create a GitHub OAuth app with the callback URL:
 
 ```text
 http://localhost:8787/callback/github
 ```
+
+and copy its client ID and secret into `GITHUB_CLIENT_ID` /
+`GITHUB_CLIENT_SECRET` in `.dev.vars`.
 
 Apply migrations to the local D1 database (the local D1 simulation is created
 from the `AUTH_DB` binding in `cloudflare.config.ts` — no `cf d1 create` needed):
@@ -82,6 +85,8 @@ npx cf workers secrets update BETTER_AUTH_SECRET
 npx cf workers secrets update GITHUB_CLIENT_ID
 npx cf workers secrets update GITHUB_CLIENT_SECRET
 npx cf workers secrets update ADMIN_USER_IDS
+# Directory preview callbacks (see "Directory Preview callbacks" below)
+npx cf workers secrets update EXTENSIONS_PREVIEW_CLIENT_ID
 ```
 
 `ADMIN_USER_IDS` is a comma-separated, case-sensitive list of immutable local user IDs
