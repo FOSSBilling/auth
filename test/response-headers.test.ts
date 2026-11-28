@@ -10,6 +10,7 @@ const session = {
   user: { id: "user", name: "Test User", email: "test@example.com" }
 };
 const globals = globalThis as typeof globalThis & {
+  responseHeadersTestBaseUrl?: string;
   responseHeadersTestAuth: {
     api: { getSession: () => Promise<typeof session | null> };
     handler: (request: Request) => Promise<Response>;
@@ -34,13 +35,46 @@ globals.responseHeadersTestAuth = {
 
 // Exercise the actual router without D1 or GitHub; only auth is substituted.
 const hooks = registerRouterTestHooks(
-  `export function getAuth() { return globalThis.responseHeadersTestAuth; }
+  `export function getAuth(env) {
+     globalThis.responseHeadersTestBaseUrl = env.BETTER_AUTH_URL;
+     return globalThis.responseHeadersTestAuth;
+   }
    export function isTrustedCallbackUrl() { return false; }`
 );
 const { default: app } = await import("../src/index.ts");
 hooks.deregister();
 const env = {} as Env;
 const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} };
+
+test("previews use their own HTTPS origin for Auth", async () => {
+  const configured = {
+    ...env,
+    BETTER_AUTH_URL: "https://auth.fossbilling.net"
+  };
+  const preview = new Request("https://pr-42.auth.fossbilling.foo/sign-in", {
+    headers: { "x-forwarded-host": "other.example" }
+  });
+  await app.fetch(preview, configured, ctx);
+  assert.equal(globals.responseHeadersTestBaseUrl, configured.BETTER_AUTH_URL);
+
+  const previewEnv = { ...configured, AUTH_PREVIEW: "true" };
+  await app.fetch(preview, previewEnv, ctx);
+  assert.equal(
+    globals.responseHeadersTestBaseUrl,
+    "https://pr-42.auth.fossbilling.foo"
+  );
+  assert.equal(previewEnv.BETTER_AUTH_URL, configured.BETTER_AUTH_URL);
+
+  for (const origin of [
+    "https://auth.fossbilling.net",
+    "https://pr-42.auth.fossbilling.foo.example",
+    "https://pr-42.auth.fossbilling.foo:8443",
+    "http://pr-42.auth.fossbilling.foo"
+  ]) {
+    const response = await app.fetch(new Request(origin), previewEnv, ctx);
+    assert.equal(response.status, 400, origin);
+  }
+});
 
 test("account and OAuth HTML forbid storage, including aliases and HEAD", async () => {
   for (const path of [

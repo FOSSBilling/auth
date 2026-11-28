@@ -72,8 +72,15 @@ does not run npm `predeploy` hooks.
 > `workers_dev` is disabled, so the Worker is only reachable on its custom
 > domain.
 
-When fork pull requests are enabled in GitHub, they run CI checks. Cloudflare
-Worker previews are deployed from branches in this repository.
+Branches in this repository deploy Cloudflare Worker previews. Fork PRs deploy
+after approval through the GitHub `fork-preview` environment. A scheduled job
+removes previews for closed fork PRs.
+
+Previews Base binds `AUTH_DB` to the `auth-preview` D1 database and sets
+`AUTH_PREVIEW=true`, `NODE_ENV=production`, and a preview-only
+`BETTER_AUTH_SECRET`. Apply schema changes to `auth-preview` as well as the
+production database. For GitHub sign-in, use a dedicated preview OAuth app and
+register callbacks on `https://<preview>.auth.fossbilling.foo/callback/github`.
 
 1. Create a Cloudflare D1 database.
 2. Replace the database `id` in `cloudflare.config.ts` and in the

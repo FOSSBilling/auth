@@ -1,10 +1,15 @@
 name: Cloudflare Events
 
 on:
+  workflow_run:
+    workflows: [CI/CD]
+    types: [completed]
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, closed]
   delete:
+  schedule:
+    - cron: '17 3 * * *'
 
 permissions: {}
 
@@ -41,7 +46,32 @@ jobs:
     with:
       operation: delete-preview
       worker-name: ${{ github.event.repository.name }}
+      reserve-fork-preview-names: true
       environment: preview
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+  fork-preview:
+    if: github.repository == 'FOSSBilling/auth' && github.event.workflow_run.event == 'pull_request'
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-fork-preview.yml@24344bcecff7984a243f6147b4512a374835e9ee # main
+    with:
+      build-workflow: ci-cd.yml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+  clean-fork-previews:
+    if: github.repository == 'FOSSBilling/auth' && github.event_name == 'schedule'
+    permissions:
+      pull-requests: read
+    uses: FOSSBilling/.workflows/.github/workflows/cloudflare-fork-preview-cleanup.yml@24344bcecff7984a243f6147b4512a374835e9ee # main
+    with:
+      worker-name: auth
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

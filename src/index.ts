@@ -71,6 +71,17 @@ function contentSecurityPolicy(nonce: string): string {
 }
 
 app.use("*", async (c, next) => {
+  if (c.env.AUTH_PREVIEW === "true") {
+    const { origin } = new URL(c.req.url);
+    if (
+      !/^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.auth\.fossbilling\.foo$/.test(
+        origin
+      )
+    ) {
+      return c.text("Invalid preview hostname", 400);
+    }
+    c.env = { ...c.env, BETTER_AUTH_URL: origin };
+  }
   c.set("auth", getAuth(c.env));
   const cspNonce = newNonce();
   c.set("cspNonce", cspNonce);
