@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate:local": "cf d1 migrations apply 43ce5ec3-5ddd-429b-b9e8-550a80d0edf9 --local",
+    "db:migrate:preview": "cf d1 migrations apply f5e7f6aa-93b8-4116-afeb-6d60e3758f2f",
     "db:migrate:remote": "cf d1 migrations apply 43ce5ec3-5ddd-429b-b9e8-550a80d0edf9",
     "test": "node --test test/**/*.test.ts",
     "format": "prettier --write \"src/**/*.ts\" \"*.{json,jsonc,md,ts}\"",

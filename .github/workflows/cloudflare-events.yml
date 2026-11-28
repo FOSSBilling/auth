@@ -33,6 +33,7 @@ jobs:
     name: Delete Branch Preview
     if: >-
       github.repository == 'FOSSBilling/auth' &&
+      (github.event.pull_request.head.ref || github.event.ref) != 'staging' &&
       ((github.event_name == 'pull_request' && github.event.action == 'closed' &&
         github.event.pull_request.head.repo.id == github.event.repository.id) ||
        (github.event_name == 'delete' && github.event.ref_type == 'branch'))

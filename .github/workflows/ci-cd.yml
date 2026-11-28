@@ -77,7 +77,7 @@ jobs:
 
           const slug = process.env.GITHUB_REF_NAME.normalize('NFKD').replace(/\p{Mark}/gu, '').toLowerCase()
             .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-          const enabled = !/^pr-\d+$/.test(slug);
+          const enabled = slug !== 'staging' && !/^pr-\d+$/.test(slug);
           appendFileSync(process.env.GITHUB_ENV, `CLOUDFLARE_PREVIEW_BUILD=${enabled}\n`);
           appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${enabled}\n`);
           JS
@@ -134,6 +134,52 @@ jobs:
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+  staging:
+    name: Deploy Staging Auth
+    needs: [validation, build]
+    if: github.repository == 'FOSSBilling/auth' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: preview
+      deployment: false
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+
+      - name: Install Dependencies and Build
+        env:
+          CLOUDFLARE_PREVIEW_BUILD: 'true'
+        run: npm ci && npm run build && npx cf build --mode production
+
+      - name: Verify Main Head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+
+      - name: Apply Staging Migrations and Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm run db:migrate:preview
+          npm run cf-preview -- --prebuilt --preview-name staging --mode production
+
+      - name: Check Staging Auth
+        shell: bash
+        run: |
+          url=https://staging.auth.fossbilling.foo
+          curl --fail --silent --show-error --max-time 30 --retry 3 --retry-all-errors "$url/.well-known/openid-configuration" |
+            jq -e --arg issuer "$url" '.issuer == $issuer'
 
   deploy:
     name: Deploy Production

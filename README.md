@@ -78,10 +78,11 @@ removes previews for closed fork PRs.
 
 Previews Base binds `AUTH_DB` to the `auth-preview` D1 database and sets
 `AUTH_PREVIEW=true`, `NODE_ENV=production`, and a preview-only
-`BETTER_AUTH_SECRET`. Apply schema changes to `auth-preview` as well as the
-production database. For GitHub sign-in, set `GITHUB_CLIENT_ID` and the preview
-`GITHUB_CLIENT_SECRET` in Previews Base and register callbacks on
-`https://<preview>.auth.fossbilling.foo/callback/github`.
+`BETTER_AUTH_SECRET`. Pushes to `main` apply preview database migrations and
+update the named Preview at `https://staging.auth.fossbilling.foo`. For GitHub
+sign-in on staging, configure `GITHUB_CLIENT_ID` and the preview
+`GITHUB_CLIENT_SECRET` on the staging Preview and register
+`https://staging.auth.fossbilling.foo/callback/github` with GitHub.
 
 1. Create a Cloudflare D1 database.
 2. Replace the database `id` in `cloudflare.config.ts` and in the
