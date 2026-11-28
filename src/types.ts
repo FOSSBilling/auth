@@ -2,6 +2,7 @@ import type { session, user } from "./db/schema";
 
 export type Env = {
   AUTH_DB: D1Database;
+  AUTH_PREVIEW?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_SECRETS?: string;
   BETTER_AUTH_URL?: string;

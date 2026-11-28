@@ -36,11 +36,14 @@ export default defineConfig(({ isPreview }) => ({
     ],
     env: {
       NODE_ENV: bindings.text("production"),
-      BETTER_AUTH_URL: bindings.text("https://auth.fossbilling.net"),
-      GITHUB_ORGS_MAX_AGE_SECONDS: bindings.text("86400"),
-      AUTH_DB: bindings.d1({
-        name: "auth",
-        id: "43ce5ec3-5ddd-429b-b9e8-550a80d0edf9"
+      // Previews inherit their database and credentials from Previews Base.
+      ...(!isPreview && {
+        BETTER_AUTH_URL: bindings.text("https://auth.fossbilling.net"),
+        GITHUB_ORGS_MAX_AGE_SECONDS: bindings.text("86400"),
+        AUTH_DB: bindings.d1({
+          name: "auth",
+          id: "43ce5ec3-5ddd-429b-b9e8-550a80d0edf9"
+        })
       })
     }
   }
