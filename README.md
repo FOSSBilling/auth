@@ -72,6 +72,9 @@ does not run npm `predeploy` hooks.
 > `workers_dev` is disabled, so the Worker is only reachable on its custom
 > domain.
 
+When fork pull requests are enabled in GitHub, they run CI checks. Cloudflare
+Worker previews are deployed from branches in this repository.
+
 1. Create a Cloudflare D1 database.
 2. Replace the database `id` in `cloudflare.config.ts` and in the
    `db:migrate:local`/`db:migrate:remote` scripts in `package.json` (`cf d1`
